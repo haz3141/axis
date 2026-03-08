@@ -3,7 +3,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { householdMembers, profiles, tasks } from "@/lib/db/schema";
-import { getOrCreateProfile } from "@/features/profile/data";
+import { ensureProfile } from "@/features/profile/data";
 import { revalidateAppPaths } from "@/lib/revalidate";
 
 function optionalText(value: FormDataEntryValue | null) {
@@ -12,7 +12,7 @@ function optionalText(value: FormDataEntryValue | null) {
 }
 
 export async function saveProfileAction(formData: FormData) {
-  const profile = await getOrCreateProfile();
+  const profile = await ensureProfile();
 
   await db
     .update(profiles)
@@ -29,7 +29,7 @@ export async function saveProfileAction(formData: FormData) {
 }
 
 export async function addHouseholdMemberAction(formData: FormData) {
-  const profile = await getOrCreateProfile();
+  const profile = await ensureProfile();
   const name = formData.get("name")?.toString().trim();
 
   if (!name) {

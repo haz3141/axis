@@ -7,6 +7,10 @@
     "node": "24.x"
   },
   "scripts": {
+    "predb:migrate": "mkdir -p data",
+    "predev": "pnpm db:migrate",
+    "prebuild": "pnpm db:migrate",
+    "prestart": "pnpm db:migrate",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
