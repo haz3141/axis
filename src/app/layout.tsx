@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Compass Starter",
-  description: "Reusable MVP starter repository.",
+  title: "Axis",
+  description: "Personal and household organization MVP for tasks, routines, calendar planning, and quick capture.",
 };
 
 export default function RootLayout({
