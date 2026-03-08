@@ -48,21 +48,27 @@ export const tasks = sqliteTable("tasks", {
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
-export const recurrenceRules = sqliteTable("recurrence_rules", {
-  id: text("id").primaryKey(),
-  taskId: text("task_id")
-    .notNull()
-    .references(() => tasks.id, { onDelete: "cascade" }),
-  frequency: text("frequency", {
-    enum: ["daily", "weekly", "monthly"],
-  }).notNull(),
-  interval: integer("interval").notNull().default(1),
-  daysOfWeek: text("days_of_week"),
-  dayOfMonth: integer("day_of_month"),
-  endsOn: text("ends_on"),
-  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-});
+export const recurrenceRules = sqliteTable(
+  "recurrence_rules",
+  {
+    id: text("id").primaryKey(),
+    taskId: text("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    frequency: text("frequency", {
+      enum: ["daily", "weekly", "monthly"],
+    }).notNull(),
+    interval: integer("interval").notNull().default(1),
+    daysOfWeek: text("days_of_week"),
+    dayOfMonth: integer("day_of_month"),
+    endsOn: text("ends_on"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    taskIdUnique: uniqueIndex("recurrence_rules_task_id_unique").on(table.taskId),
+  })
+);
 
 export const taskOccurrenceLogs = sqliteTable(
   "task_occurrence_logs",

@@ -91,11 +91,16 @@ export async function toggleOccurrenceAction(taskId: string, scheduledFor: strin
         )
       );
   } else {
-    await db.insert(taskOccurrenceLogs).values({
-      id: crypto.randomUUID(),
-      taskId,
-      scheduledFor,
-    });
+    await db
+      .insert(taskOccurrenceLogs)
+      .values({
+        id: crypto.randomUUID(),
+        taskId,
+        scheduledFor,
+      })
+      .onConflictDoNothing({
+        target: [taskOccurrenceLogs.taskId, taskOccurrenceLogs.scheduledFor],
+      });
   }
 
   revalidateAppPaths(taskId);
