@@ -10,6 +10,10 @@ export type QuickAddContext = {
   categories: string[];
 };
 
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 const recurrencePatterns = [
   {
     pattern: /\b(daily|every day)\b/i,
@@ -64,19 +68,45 @@ function splitIntoItems(input: string) {
 function extractPriority(text: string) {
   const normalizedText = text.toLowerCase();
 
-  if (/\b(high priority|urgent)\b/.test(normalizedText) || normalizedText.includes("!!")) {
-    return "high" as TaskPriority;
+  if (/\bhigh priority\b/.test(normalizedText)) {
+    return {
+      priority: "high" as TaskPriority,
+      fragment: text.match(/\bhigh priority\b/i)?.[0] ?? null,
+    };
+  }
+
+  if (/\burgent\b/.test(normalizedText)) {
+    return {
+      priority: "high" as TaskPriority,
+      fragment: text.match(/\burgent\b/i)?.[0] ?? null,
+    };
+  }
+
+  if (normalizedText.includes("!!")) {
+    return {
+      priority: "high" as TaskPriority,
+      fragment: text.match(/!{2,}/)?.[0] ?? "!!",
+    };
   }
 
   if (/\b(low priority)\b/.test(normalizedText)) {
-    return "low" as TaskPriority;
+    return {
+      priority: "low" as TaskPriority,
+      fragment: text.match(/\blow priority\b/i)?.[0] ?? null,
+    };
   }
 
   if (/\b(medium priority)\b/.test(normalizedText)) {
-    return "medium" as TaskPriority;
+    return {
+      priority: "medium" as TaskPriority,
+      fragment: text.match(/\bmedium priority\b/i)?.[0] ?? null,
+    };
   }
 
-  return null;
+  return {
+    priority: null,
+    fragment: null,
+  };
 }
 
 function extractRecurrence(text: string) {
@@ -85,19 +115,28 @@ function extractRecurrence(text: string) {
 
     if (match) {
       return {
-        match: match[0],
+        fragments: [match[0]],
         recurrence: candidate.recurrence(),
       };
     }
   }
 
-  const weekdays = weekdayLookup
-    .map((weekday, index) => (new RegExp(`every\\s+${weekday}`, "i").test(text) ? index : null))
-    .filter((value): value is number => value !== null);
+  const weekdayMatches = weekdayLookup.flatMap((weekday, index) => {
+    const matches = text.match(new RegExp(`\\bevery\\s+${weekday}\\b`, "ig")) ?? [];
+    return matches.length
+      ? [
+          {
+            day: index,
+            fragments: matches,
+          },
+        ]
+      : [];
+  });
+  const weekdays = weekdayMatches.map((match) => match.day);
 
   if (weekdays.length) {
     return {
-      match: "weekly",
+      fragments: weekdayMatches.flatMap((match) => match.fragments),
       recurrence: {
         frequency: "weekly" as const,
         interval: 1,
@@ -112,7 +151,7 @@ function extractRecurrence(text: string) {
 
   if (monthlyMatch) {
     return {
-      match: monthlyMatch[0],
+      fragments: [monthlyMatch[0]],
       recurrence: {
         frequency: "monthly" as const,
         interval: 1,
@@ -127,22 +166,36 @@ function extractRecurrence(text: string) {
 }
 
 function extractAssignee(text: string, context: QuickAddContext) {
-  const normalizedText = text.toLowerCase();
+  if (/\bfor me\b/i.test(text) || /@me\b/i.test(text) || /\bmy task\b/i.test(text)) {
+    const fragments = [
+      ...(text.match(/\bfor me\b/ig) ?? []),
+      ...(text.match(/@me\b/ig) ?? []),
+      ...(text.match(/\bmy task\b/ig) ?? []),
+    ];
 
-  if (/\b(for me|@me|my task)\b/i.test(text)) {
     return {
       assigneeMemberId: null,
       assigneeLabel: "Mine",
       ambiguity: null,
+      fragments,
     };
   }
 
-  const matches = context.members.filter((member) => {
-    const memberName = member.name.toLowerCase();
-    return (
-      normalizedText.includes(`@${memberName}`) ||
-      normalizedText.includes(`for ${memberName}`)
-    );
+  const matches = context.members.flatMap((member) => {
+    const memberNamePattern = escapeRegex(member.name);
+    const fragments = [
+      ...(text.match(new RegExp(`@${memberNamePattern}\\b`, "ig")) ?? []),
+      ...(text.match(new RegExp(`\\bfor\\s+${memberNamePattern}\\b`, "ig")) ?? []),
+    ];
+
+    return fragments.length
+      ? [
+          {
+            member,
+            fragments,
+          },
+        ]
+      : [];
   });
 
   if (matches.length > 1) {
@@ -150,14 +203,16 @@ function extractAssignee(text: string, context: QuickAddContext) {
       assigneeMemberId: null,
       assigneeLabel: null,
       ambiguity: "Multiple household members matched this assignee.",
+      fragments: [],
     };
   }
 
   if (matches.length === 1) {
     return {
-      assigneeMemberId: matches[0].id,
-      assigneeLabel: matches[0].name,
+      assigneeMemberId: matches[0].member.id,
+      assigneeLabel: matches[0].member.name,
       ambiguity: null,
+      fragments: matches[0].fragments,
     };
   }
 
@@ -166,6 +221,7 @@ function extractAssignee(text: string, context: QuickAddContext) {
       assigneeMemberId: null,
       assigneeLabel: null,
       ambiguity: "Assignee was mentioned but did not match the household roster.",
+      fragments: [],
     };
   }
 
@@ -173,6 +229,7 @@ function extractAssignee(text: string, context: QuickAddContext) {
     assigneeMemberId: null,
     assigneeLabel: null,
     ambiguity: null,
+    fragments: [],
   };
 }
 
@@ -183,18 +240,24 @@ function extractCategory(text: string, context: QuickAddContext) {
     return {
       category: hashtagMatch[1].replace(/-/g, " "),
       ambiguity: null,
+      fragments: [hashtagMatch[0]],
     };
   }
 
   const normalizedText = text.toLowerCase();
   const matchedCategory = context.categories.find((category) =>
-    normalizedText.includes(`in ${category.toLowerCase()}`)
+    new RegExp(`\\bin\\s+${escapeRegex(category)}\\b`, "i").test(normalizedText)
   );
 
   if (matchedCategory) {
+    const fragment =
+      text.match(new RegExp(`\\bin\\s+${escapeRegex(matchedCategory)}\\b`, "i"))?.[0] ??
+      null;
+
     return {
       category: matchedCategory,
       ambiguity: null,
+      fragments: fragment ? [fragment] : [],
     };
   }
 
@@ -202,12 +265,14 @@ function extractCategory(text: string, context: QuickAddContext) {
     return {
       category: null,
       ambiguity: "Category was mentioned but did not match an existing label.",
+      fragments: [],
     };
   }
 
   return {
     category: null,
     ambiguity: null,
+    fragments: [],
   };
 }
 
@@ -231,7 +296,7 @@ export function parseQuickAddInput(input: string, context: QuickAddContext) {
     const recurrenceMatch = extractRecurrence(item);
     const assigneeMatch = extractAssignee(item, context);
     const categoryMatch = extractCategory(item, context);
-    const priority = extractPriority(item);
+    const priorityMatch = extractPriority(item);
 
     if (assigneeMatch.ambiguity) {
       ambiguities.push(assigneeMatch.ambiguity);
@@ -247,17 +312,17 @@ export function parseQuickAddInput(input: string, context: QuickAddContext) {
 
     const cleanedTitle = stripFragments(item, [
       parsedDate?.text ?? null,
-      recurrenceMatch?.match,
-      assigneeMatch.assigneeLabel ? `for ${assigneeMatch.assigneeLabel}` : null,
-      categoryMatch.category ? `#${categoryMatch.category}` : null,
-      priority ? `${priority} priority` : null,
+      ...(recurrenceMatch?.fragments ?? []),
+      ...assigneeMatch.fragments,
+      ...categoryMatch.fragments,
+      priorityMatch.fragment,
     ]).replace(/^[:,\-]+|[:,\-]+$/g, "");
 
     return {
       sourceText: item,
       title: cleanedTitle || item,
       dueDate,
-      priority,
+      priority: priorityMatch.priority,
       category: categoryMatch.category,
       assigneeMemberId: assigneeMatch.assigneeMemberId,
       assigneeLabel: assigneeMatch.assigneeLabel,

@@ -105,6 +105,10 @@ export async function createQuickAddTasksAction(formData: FormData) {
   const payload = formData.get("drafts")?.toString() ?? "[]";
   const parsedDrafts = JSON.parse(payload) as QuickAddDraft[];
 
+  if (!parsedDrafts.length || parsedDrafts.some((draft) => draft.ambiguities.length > 0)) {
+    redirect("/quick-add");
+  }
+
   await createQuickAddTasks(parsedDrafts);
   revalidateAppPaths();
   redirect("/tasks");

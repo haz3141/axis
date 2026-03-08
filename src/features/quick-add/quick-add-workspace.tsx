@@ -21,6 +21,7 @@ export function QuickAddWorkspace({
   const [input, setInput] = useState("");
   const [drafts, setDrafts] = useState<QuickAddDraft[]>([]);
   const [parsed, setParsed] = useState(false);
+  const hasAmbiguities = drafts.some((draft) => draft.ambiguities.length > 0);
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
@@ -118,7 +119,15 @@ export function QuickAddWorkspace({
                 ))}
               </div>
 
-              <Button type="submit">Create {drafts.length} draft task{drafts.length === 1 ? "" : "s"}</Button>
+              {hasAmbiguities ? (
+                <p className="text-sm text-amber-700">
+                  Resolve the highlighted drafts in the source text, then parse again before creating tasks.
+                </p>
+              ) : null}
+
+              <Button type="submit" disabled={hasAmbiguities}>
+                Create {drafts.length} draft task{drafts.length === 1 ? "" : "s"}
+              </Button>
             </form>
           ) : (
             <Card>
