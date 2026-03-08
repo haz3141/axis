@@ -167,10 +167,15 @@ export function nextOccurrence(
   anchorDate: string,
   rule: RecurrenceRuleShape,
   start: string,
-  maxDays = 90
+  maxDays = 90,
+  excludedDates?: Set<string>
 ) {
   const end = addDays(start, maxDays);
-  return projectOccurrences(anchorDate, rule, start, end)[0] ?? null;
+  return (
+    projectOccurrences(anchorDate, rule, start, end).find(
+      (candidateDate) => !excludedDates?.has(candidateDate)
+    ) ?? null
+  );
 }
 
 export function defaultMonthlyDay(dateKey: string) {

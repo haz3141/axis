@@ -91,7 +91,13 @@ function taskNextDue(task: TaskWithRelations, start = todayKey()) {
     return null;
   }
 
-  return nextOccurrence(task.dueDate, recurrenceShape(task.recurrenceRule), start);
+  return nextOccurrence(
+    task.dueDate,
+    recurrenceShape(task.recurrenceRule),
+    start,
+    365,
+    new Set(task.occurrenceLogs.map((log) => log.scheduledFor))
+  );
 }
 
 function toDisplayTask(task: TaskWithRelations): DisplayTask {
