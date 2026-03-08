@@ -1,102 +1,96 @@
-# Starter Playbook
+# Axis Playbook
 
-This repository is a reusable MVP starter built on Next.js App Router,
-TypeScript, Tailwind CSS, and shadcn/ui. It is intentionally minimal so new
-products can start from a clean baseline instead of a framework pile.
+Axis is the current app built on the Compass baseline. The starter constraints
+still matter, but this repo now owns app-specific product flows and local data
+storage.
 
 ## Agreed Stack
 
-- Next.js (App Router)
+- Next.js App Router
 - TypeScript
 - Tailwind CSS v4
-- shadcn/ui (default init + core primitives)
-- `next-themes` for dark/light theme handling
-- `lucide-react` for icons
-- pnpm for package management
+- shadcn/ui primitives copied into `src/components/ui`
+- `next-themes`
+- `lucide-react`
+- SQLite via `@libsql/client`
+- Drizzle ORM + Drizzle Kit
+- pnpm
 
-## Toolchain Baseline
+## Product Boundaries
 
-- Node.js 24.x via `.nvmrc` and `.node-version`
-- pnpm 10.30.3 via `package.json#packageManager`
+- Keep the app focused on the MVP foundation:
+  - one-time tasks
+  - recurring tasks / habits
+  - shared household assignment
+  - calendar planning
+  - simple stats
+  - quick natural-language capture
+- Keep these deferred:
+  - auth, invites, and permissions
+  - goal tracking as a first-class entity
+  - non-task calendar events
+  - astrology or human-design behavior logic
+  - heavy analytics, gamification, or deep social features
+  - Storybook or broad tooling expansion
 
-## Starter Principles
+## Architecture Rules
 
-- Keep the dependency surface intentionally small.
-- Prefer modern defaults and low-friction setup.
-- Preserve reusability over app-specific convenience.
-- Update docs whenever setup or workflow changes.
+- `src/components/ui`: vendored or low-level primitives.
+- `src/components/system`: only for generic cross-cutting building blocks that
+  clearly earn reuse.
+- `src/components/patterns`: only for truly reusable composites.
+- `src/features/*`: product and domain code. Axis should keep route logic,
+  queries, actions, and view-specific components here.
+- Prefer Server Components and Server Actions for reads/mutations. Use
+  `"use client"` only where interactivity requires it.
 
-## Engineering Rules
+## Data and Persistence
 
-- Keep diffs minimal and production-grade.
-- Prefer Server Components; use `"use client"` only where needed.
-- Avoid adding extra dependencies unless required.
-- No auth, database, analytics, or app-specific screens in the starter.
-- Use pnpm only for package operations.
+- Local data lives in `data/axis.sqlite`.
+- Drizzle schema lives in `src/lib/db/schema.ts`.
+- Committed migrations live in `drizzle/`.
+- App startup applies committed migrations automatically.
+- When the schema changes:
+  1. update `src/lib/db/schema.ts`
+  2. run `pnpm db:generate`
+  3. run `pnpm db:migrate`
+  4. re-run `pnpm lint`, `pnpm typecheck`, and `pnpm build`
 
-## Design System Foundation
+## UI Guidance
 
-- Compass is design-system-ready, not yet a full design system.
-- The current foundation is:
-  - semantic theme tokens in `src/app/globals.css`
-  - shadcn/ui configuration in `components.json`
-  - low-level primitives in `src/components/ui`
-  - reserved `src/components/system` and `src/components/patterns` layers for
-    future reuse
-- Compass should stay minimal and generic. Do not expand the design system just
-  because more components are available.
-
-## Component Layer Boundaries
-
-- `src/components/ui`: vendored or low-level primitives. Keep these close to the
-  upstream shadcn/ui shape and use them as the base layer.
-- `src/components/system`: generic cross-cutting building blocks that improve
-  reuse without adding product meaning.
-- `src/components/patterns`: reusable composites built from primitives and
-  system components.
-- Feature-specific or product-specific UI should stay out of these shared
-  layers.
-
-## Token Usage Rules
-
+- Keep screens neutral, clear, and wireframe-grade.
 - Prefer semantic utilities such as `bg-background`, `text-foreground`,
-  `text-muted-foreground`, `border-border`, and component variants that already
-  map to the shared token set.
-- Avoid raw palette utility classes in starter and system code when a semantic
-  token already exists.
-- Keep light/dark theming driven by CSS variables. Avoid introducing
-  app-specific brand tokens in the starter baseline.
-- When in doubt, choose the smallest semantic rule that keeps future app work
-  flexible.
+  `text-muted-foreground`, and `border-border`.
+- Avoid expanding the design system just because more primitives are available.
+- Let reusable patterns emerge from repeated need instead of designing them up
+  front.
 
-## Deferred By Default
+## Main Routes
 
-- Stage 2 wrappers or system components such as layout helpers, field shells, or
-  page-level building blocks
-- Reusable app patterns, navigation shells, dashboards, or feature flows
-- Brand customization, showcase UI polish, or large component-library
-  expansion
-- Extra tooling such as Storybook, analytics, database setup, or process-heavy
-  governance
+- `/`: today dashboard
+- `/tasks`: inbox and manual task entry
+- `/tasks/[taskId]`: task detail and edit flow
+- `/calendar`: month grid plus day agenda
+- `/shared`: grouped assignment view
+- `/profile`: profile and household data
+- `/quick-add`: natural-language draft review flow
 
-## Day-1 Commands
+## Checks
+
+Run these before finishing work:
 
 ```bash
-corepack enable
-pnpm install
-pnpm dev
-pnpm check
 pnpm lint
 pnpm typecheck
 pnpm build
 ```
 
-## Commit and CI Contract
+## Commit Contract
 
 - Use Conventional Commits (`type(scope): summary`).
-- Keep commits atomic (one logical change per commit).
-- CI must pass `lint`, `typecheck`, and `build` on PRs and pushes to `main`.
-- Keep GitHub hygiene lightweight and practical.
+- Keep commits atomic and reviewable.
+- Update docs in the same task as meaningful workflow, tooling, or architecture
+  changes.
 
 See also:
 - `docs/WORKFLOW_GITHUB.md`

@@ -1,50 +1,61 @@
-# Compass
+# Axis
 
-Compass is a minimal reusable MVP starter template for future apps.
-It is design-system-ready, but intentionally not a full design system.
+Axis is a personal and household organization MVP built from the Compass
+template baseline. It focuses on practical planning flows instead of polished
+branding: task capture, recurring routines, shared household assignment,
+calendar scheduling, and simple progress summaries.
 
-It keeps the baseline intentionally small so new products can start with a
-modern stack, consistent conventions, and clean documentation without taking on
-extra product logic or tooling.
+## Stack
+
+- Next.js App Router
+- TypeScript
+- Tailwind CSS v4
+- shadcn/ui primitives
+- `next-themes`
+- SQLite via `@libsql/client`
+- Drizzle ORM + Drizzle Kit
+- pnpm
+
+## MVP Features
+
+- Dashboard / Today view with due, overdue, upcoming, and recurring summaries
+- Task inbox with create, edit, complete, archive, and delete flows
+- Recurring task support with projected occurrences instead of duplicated future rows
+- Calendar month view with daily agenda
+- Shared / assigned view grouped by household member
+- Profile and household roster management
+- Natural-language quick add that parses multiple items into reviewable drafts
+
+## Data Model
+
+Axis stores data locally in `data/axis.sqlite`.
+
+Core tables:
+
+- `profiles`
+- `household_members`
+- `tasks`
+- `recurrence_rules`
+- `task_occurrence_logs`
+
+Committed migrations live in `drizzle/`. The app applies committed migrations on
+startup, and schema changes should still go through `pnpm db:generate` followed
+by `pnpm db:migrate`.
+
+## Routes
+
+- `/` today dashboard
+- `/tasks` inbox and manual task entry
+- `/tasks/[taskId]` task detail / edit flow
+- `/calendar` calendar planning view
+- `/shared` assigned task view
+- `/profile` profile and household roster
+- `/quick-add` natural-language capture flow
 
 ## Requirements
 
 - Node.js 24.x
 - pnpm 10.30.3 via `packageManager`
-
-## Included
-
-- Next.js App Router
-- TypeScript
-- Tailwind CSS v4
-- shadcn/ui default-first setup
-- `next-themes`
-- `lucide-react`
-- pnpm
-
-## Philosophy
-
-- Keep the starter small and reusable.
-- Prefer modern defaults with minimal friction.
-- Treat documentation as part of the starter.
-- Avoid adding product-specific features to the baseline.
-
-## Design System Scope
-
-- Compass is design-system-ready: semantic theme tokens, a small primitive
-  layer, and clear component boundaries are already in place.
-- Compass is not yet a full design system: generic wrappers, reusable
-  composites, and brand-layer customization stay deferred until reuse pressure
-  is real.
-- See the [Starter Playbook](docs/STARTER_PLAYBOOK.md) for token usage rules and
-  component-layer guidance.
-
-## Intentionally Out Of Scope
-
-- Authentication, database, analytics, or app-specific flows
-- Extra state libraries
-- Storybook or heavy repo tooling
-- Expanded starter UI beyond the minimal placeholder
 
 ## Quick Start
 
@@ -60,24 +71,26 @@ Open `http://localhost:3000` after the dev server starts.
 
 ```bash
 pnpm dev
-pnpm check
 pnpm lint
 pnpm typecheck
 pnpm build
 pnpm start
+pnpm db:generate
+pnpm db:migrate
 ```
+
+## Developer Notes
+
+- Keep the UI wireframe-grade and MVP-scoped.
+- Prefer Server Components; use `"use client"` only for interactive form or
+  parser flows.
+- Keep shared abstractions minimal. Product logic belongs under
+  `src/features/*`.
+- Use semantic tokens from `src/app/globals.css` instead of ad hoc palette
+  choices.
 
 ## Docs
 
-- [Starter Playbook](docs/STARTER_PLAYBOOK.md)
+- [Playbook](docs/STARTER_PLAYBOOK.md)
 - [GitHub Workflow](docs/WORKFLOW_GITHUB.md)
 - [Conventional Commits](docs/CONVENTIONAL_COMMITS.md)
-
-## Template Use
-
-This repository is intended to stay suitable as a lightweight public GitHub
-template. Keep changes minimal, production-grade, and easy to understand for
-the next app built from it.
-
-It ships with an MIT [LICENSE](LICENSE) and a lightweight pull request
-template so public-template hygiene stays clear without adding heavy process.
