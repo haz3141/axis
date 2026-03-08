@@ -49,7 +49,8 @@ storage.
 - Local data lives in `data/axis.sqlite`.
 - Drizzle schema lives in `src/lib/db/schema.ts`.
 - Committed migrations live in `drizzle/`.
-- App startup applies committed migrations automatically.
+- The standard `pnpm dev`, `pnpm build`, and `pnpm start` flows run
+  `pnpm db:migrate` before launching.
 - When the schema changes:
   1. update `src/lib/db/schema.ts`
   2. run `pnpm db:generate`

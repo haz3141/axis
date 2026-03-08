@@ -9,7 +9,7 @@ import {
   type TaskOccurrenceLogRecord,
   type TaskRecord,
 } from "@/lib/db/schema";
-import { getHouseholdMembers, getOrCreateProfile } from "@/features/profile/data";
+import { ensureProfile, getHouseholdMembers, getProfile } from "@/features/profile/data";
 import {
   addDays,
   buildMonthGrid,
@@ -140,7 +140,15 @@ function agendaItem(task: TaskWithRelations, scheduledFor: string): AgendaItem {
 }
 
 async function loadTasks() {
-  const profile = await getOrCreateProfile();
+  const profile = await getProfile();
+
+  if (!profile) {
+    return {
+      profile: null,
+      tasks: [],
+    };
+  }
+
   const taskRows = await db.query.tasks.findMany({
     where: eq(tasks.profileId, profile.id),
     with: {
@@ -194,7 +202,7 @@ export async function saveTaskInput(
   input: TaskInput,
   existingTask?: TaskRecord | null
 ) {
-  const profile = await getOrCreateProfile();
+  const profile = await ensureProfile();
   const taskId = existingTask?.id ?? crypto.randomUUID();
   const isRecurring = Boolean(input.recurrence);
   const nextStatus =

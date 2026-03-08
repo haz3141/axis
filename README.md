@@ -38,9 +38,9 @@ Core tables:
 - `recurrence_rules`
 - `task_occurrence_logs`
 
-Committed migrations live in `drizzle/`. The app applies committed migrations on
-startup, and schema changes should still go through `pnpm db:generate` followed
-by `pnpm db:migrate`.
+Committed migrations live in `drizzle/`. The standard `pnpm dev`, `pnpm build`,
+and `pnpm start` flows run `pnpm db:migrate` before launching, and schema
+changes should still go through `pnpm db:generate` followed by `pnpm db:migrate`.
 
 ## Routes
 
