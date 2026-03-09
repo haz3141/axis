@@ -13,17 +13,22 @@ import {
 } from "@/features/tasks/actions";
 import { PriorityBadge } from "@/features/tasks/components/priority-badge";
 import { TaskActionNotice } from "@/features/tasks/components/task-action-notice";
+import { TaskTaxonomyBadges } from "@/features/tasks/components/task-taxonomy-badges";
 import { TaskForm } from "@/features/tasks/components/task-form";
 import { getTaskDetail } from "@/features/tasks/data";
 import { formatLongDate } from "@/features/tasks/lib/dates";
+import { parseTaskFormErrorCode } from "@/features/tasks/lib/form";
+import { mergeTaskTagNames } from "@/features/tasks/lib/organization";
+import { recurrenceDraftFromRule } from "@/features/tasks/lib/recurrence-edit";
 import {
   buildTaskConfirmHref,
   clearTaskConfirmHref,
+  clearTaskFormErrorHref,
   clearTaskNoticeHref,
   pathFromSearchParams,
   readTaskConfirm,
 } from "@/features/tasks/lib/notices";
-import { describeRecurrence, parseDaysOfWeek } from "@/features/tasks/lib/recurrence";
+import { describeRecurrence } from "@/features/tasks/lib/recurrence";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +40,7 @@ type TaskDetailPageProps = {
     notice?: string;
     undo?: string;
     confirm?: string;
+    error?: string;
   }>;
 };
 
@@ -44,7 +50,7 @@ export default async function TaskDetailPage({
 }: TaskDetailPageProps) {
   const { taskId } = await params;
   const resolvedSearchParams = await searchParams;
-  const { categories, members, task, executionState } = await getTaskDetail(taskId);
+  const { members, projects, tags, task, executionState } = await getTaskDetail(taskId);
 
   if (!task || !executionState) {
     notFound();
@@ -52,8 +58,9 @@ export default async function TaskDetailPage({
 
   const pathname = `/tasks/${task.id}`;
   const currentPath = pathFromSearchParams(pathname, resolvedSearchParams);
-  const returnTo = clearTaskConfirmHref(clearTaskNoticeHref(currentPath));
+  const returnTo = clearTaskFormErrorHref(clearTaskConfirmHref(clearTaskNoticeHref(currentPath)));
   const confirm = readTaskConfirm(resolvedSearchParams);
+  const formErrorCode = parseTaskFormErrorCode(resolvedSearchParams.error);
 
   const updateAction = updateTaskAction.bind(null, task.id);
   const deleteAction = deleteTaskAction.bind(null, task.id, "/tasks");
@@ -62,6 +69,10 @@ export default async function TaskDetailPage({
   const completeAction = completeTaskAction.bind(null, task.id, returnTo);
   const reopenAction = reopenTaskAction.bind(null, task.id, returnTo);
   const recurrenceSummary = describeRecurrence(task.recurrenceRule, task.dueDate);
+  const taskTagNames = mergeTaskTagNames(
+    task.taskTags.map((taskTag) => taskTag.tag.name),
+    task.category
+  );
 
   return (
     <div className="grid gap-6">
@@ -80,7 +91,10 @@ export default async function TaskDetailPage({
                 ) : (
                   <Badge variant="outline">Mine</Badge>
                 )}
-                {task.category ? <Badge variant="outline">#{task.category}</Badge> : null}
+                <TaskTaxonomyBadges
+                  projectName={task.project?.name ?? null}
+                  tagNames={taskTagNames}
+                />
               </div>
               <div className="space-y-2">
                 <CardTitle>{task.title}</CardTitle>
@@ -285,7 +299,7 @@ export default async function TaskDetailPage({
           <CardHeader>
             <CardTitle>Edit details</CardTitle>
             <CardDescription>
-              Update scheduling, legacy category, assignment, notes, and recurrence settings.
+              Update scheduling, project, tags, assignment, notes, and recurrence settings.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -293,23 +307,24 @@ export default async function TaskDetailPage({
               action={updateAction}
               submitLabel="Save changes"
               members={members}
-              categories={categories}
+              projects={projects}
+              tags={tags}
+              returnTo={returnTo}
+              formErrorCode={formErrorCode}
+              recurrenceHistory={{
+                dueDate: task.dueDate,
+                recurrence: recurrenceDraftFromRule(task.recurrenceRule),
+                occurrenceCount: task.occurrenceLogs.length,
+              }}
               initialValues={{
                 title: task.title,
                 notes: task.notes,
                 dueDate: task.dueDate,
                 priority: task.priority,
-                category: task.category,
+                projectName: task.project?.name ?? null,
+                tagNames: taskTagNames,
                 assigneeMemberId: task.assigneeMemberId,
-                recurrence: task.recurrenceRule
-                  ? {
-                      frequency: task.recurrenceRule.frequency,
-                      interval: task.recurrenceRule.interval,
-                      daysOfWeek: parseDaysOfWeek(task.recurrenceRule.daysOfWeek),
-                      dayOfMonth: task.recurrenceRule.dayOfMonth,
-                      endsOn: task.recurrenceRule.endsOn,
-                    }
-                  : null,
+                recurrence: recurrenceDraftFromRule(task.recurrenceRule),
               }}
             />
           </CardContent>

@@ -9,10 +9,18 @@ import {
   restoreTaskAction,
 } from "@/features/tasks/actions";
 import { TaskActionNotice } from "@/features/tasks/components/task-action-notice";
+import { TaskFilterForm } from "@/features/tasks/components/task-filter-form";
 import { TaskForm } from "@/features/tasks/components/task-form";
 import { PriorityBadge } from "@/features/tasks/components/priority-badge";
+import { TaskTaxonomyBadges } from "@/features/tasks/components/task-taxonomy-badges";
 import { getTasksPageData } from "@/features/tasks/data";
 import { formatShortDate } from "@/features/tasks/lib/dates";
+import {
+  buildFilterHref,
+  filterDisplayTasks,
+  readTaskFilterState,
+} from "@/features/tasks/lib/filters";
+import { parseTaskFormErrorCode } from "@/features/tasks/lib/form";
 import {
   normalizeTaskListView,
   selectArchivedTasks,
@@ -25,8 +33,14 @@ export const dynamic = "force-dynamic";
 type TasksPageProps = {
   searchParams: Promise<{
     view?: string;
+    q?: string;
+    project?: string;
+    tag?: string;
+    priority?: string;
+    assignee?: string;
     notice?: string;
     undo?: string;
+    error?: string;
   }>;
 };
 
@@ -45,13 +59,36 @@ const viewCopy = {
   },
 } as const;
 
+function hasActiveFilters(filters: {
+  q: string;
+  project: string;
+  tag: string;
+  priority: string;
+  assignee: string;
+}) {
+  return Boolean(
+    filters.q || filters.project || filters.tag || filters.priority || filters.assignee
+  );
+}
+
 export default async function TasksPage({ searchParams }: TasksPageProps) {
   const params = await searchParams;
-  const { categories, members, tasks } = await getTasksPageData();
-  const view = normalizeTaskListView(params.view);
-  const inboxTasks = selectInboxTasks(tasks);
-  const completedTasks = selectCompletedTasks(tasks);
-  const archivedTasks = selectArchivedTasks(tasks);
+  const { members, projects, tags, tasks } = await getTasksPageData();
+  const filters = readTaskFilterState(params, normalizeTaskListView);
+  const formErrorCode = parseTaskFormErrorCode(params.error);
+  const view = filters.view;
+  const filteredInboxTasks = filterDisplayTasks(selectInboxTasks(tasks), filters);
+  const filteredCompletedTasks = filterDisplayTasks(selectCompletedTasks(tasks), filters);
+  const filteredArchivedTasks = filterDisplayTasks(selectArchivedTasks(tasks), filters);
+  const filtersApplied = hasActiveFilters(filters);
+  const clearHref = buildFilterHref("/tasks", {
+    ...filters,
+    q: "",
+    project: "",
+    tag: "",
+    priority: "",
+    assignee: "",
+  });
 
   return (
     <div className="grid gap-6">
@@ -65,7 +102,7 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
             <p className="max-w-2xl text-sm text-muted-foreground">{viewCopy[view].description}</p>
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             <Button asChild variant="outline">
               <Link href="/quick-add">Batch quick add</Link>
             </Button>
@@ -77,27 +114,32 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
 
         <div className="flex flex-wrap gap-2">
           {[
-            ["inbox", "Inbox", inboxTasks.length],
-            ["completed", "Completed", completedTasks.length],
-            ["archived", "Archived", archivedTasks.length],
-          ].map(([value, label, count]) => {
-            const href = value === "inbox" ? "/tasks" : `/tasks?view=${value}`;
-
-            return (
-              <Button
-                key={value}
-                asChild
-                variant={view === value ? "default" : "outline"}
-                size="sm"
-              >
-                <Link href={href}>
-                  {label}
-                  <Badge variant={view === value ? "secondary" : "outline"}>{count}</Badge>
-                </Link>
-              </Button>
-            );
-          })}
+            ["inbox", "Inbox", filteredInboxTasks.length],
+            ["completed", "Completed", filteredCompletedTasks.length],
+            ["archived", "Archived", filteredArchivedTasks.length],
+          ].map(([value, label, count]) => (
+            <Button
+              key={value}
+              asChild
+              variant={view === value ? "default" : "outline"}
+              size="sm"
+            >
+              <Link href={buildFilterHref("/tasks", { ...filters, view: value as typeof view })}>
+                {label}
+                <Badge variant={view === value ? "secondary" : "outline"}>{count}</Badge>
+              </Link>
+            </Button>
+          ))}
         </div>
+
+        <TaskFilterForm
+          clearHref={clearHref}
+          filters={filters}
+          members={members}
+          pathname="/tasks"
+          projects={projects}
+          tags={tags}
+        />
       </section>
 
       {view === "inbox" ? (
@@ -110,8 +152,8 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3">
-              {inboxTasks.length ? (
-                inboxTasks.map((task) => (
+              {filteredInboxTasks.length ? (
+                filteredInboxTasks.map((task) => (
                   <div
                     key={task.id}
                     className="flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between"
@@ -122,6 +164,10 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
                           {task.title}
                         </Link>
                         <PriorityBadge priority={task.priority} />
+                        <TaskTaxonomyBadges
+                          projectName={task.projectName}
+                          tagNames={task.tagNames}
+                        />
                         {task.assigneeName ? (
                           <Badge variant="secondary">{task.assigneeName}</Badge>
                         ) : null}
@@ -135,7 +181,7 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
                       <Button asChild variant="outline">
                         <Link href={`/tasks/${task.id}#edit-task`}>Edit</Link>
                       </Button>
-                      <form action={completeTaskAction.bind(null, task.id, "/tasks")}>
+                      <form action={completeTaskAction.bind(null, task.id, buildFilterHref("/tasks", filters))}>
                         <Button type="submit">Complete</Button>
                       </form>
                     </div>
@@ -144,7 +190,9 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
               ) : (
                 <div className="rounded-2xl border border-dashed p-6">
                   <p className="text-sm text-muted-foreground">
-                    Inbox is clear. Use <span className="font-medium">q</span> to capture quickly or add a task manually.
+                    {filtersApplied
+                      ? "No inbox tasks match the current filters."
+                      : "Inbox is clear. Use q to capture quickly or add a task manually."}
                   </p>
                   <div className="mt-4 flex gap-3">
                     <Button asChild variant="outline">
@@ -163,7 +211,7 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
             <CardHeader>
               <CardTitle>Manual task entry</CardTitle>
               <CardDescription>
-                Use the full form when you already know the schedule, assignee, or recurrence rule.
+                Use the full form when you already know the schedule, assignee, project, tags, or recurrence rule.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -171,7 +219,10 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
                 action={createTaskAction}
                 submitLabel="Create task"
                 members={members}
-                categories={categories}
+                projects={projects}
+                tags={tags}
+                returnTo={buildFilterHref("/tasks", filters)}
+                formErrorCode={formErrorCode}
               />
             </CardContent>
           </Card>
@@ -185,8 +236,8 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
             <CardDescription>Recently closed one-time tasks.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3">
-            {completedTasks.length ? (
-              completedTasks.map((task) => (
+            {filteredCompletedTasks.length ? (
+              filteredCompletedTasks.map((task) => (
                 <div
                   key={task.id}
                   className="flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between"
@@ -197,6 +248,10 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
                         {task.title}
                       </Link>
                       <PriorityBadge priority={task.priority} />
+                      <TaskTaxonomyBadges
+                        projectName={task.projectName}
+                        tagNames={task.tagNames}
+                      />
                     </div>
                     <p className="text-sm text-muted-foreground">
                       {task.completedAt
@@ -209,7 +264,13 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
                     <Button asChild variant="outline">
                       <Link href={`/tasks/${task.id}#edit-task`}>Edit</Link>
                     </Button>
-                    <form action={reopenTaskAction.bind(null, task.id, "/tasks?view=completed")}>
+                    <form
+                      action={reopenTaskAction.bind(
+                        null,
+                        task.id,
+                        buildFilterHref("/tasks", { ...filters, view: "completed" })
+                      )}
+                    >
                       <Button type="submit" variant="outline">
                         Reopen
                       </Button>
@@ -220,7 +281,9 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
             ) : (
               <div className="rounded-2xl border border-dashed p-6">
                 <p className="text-sm text-muted-foreground">
-                  Nothing is completed yet. Today and Inbox will surface work that is still active.
+                  {filtersApplied
+                    ? "No completed tasks match the current filters."
+                    : "Nothing is completed yet. Today and Inbox will surface work that is still active."}
                 </p>
                 <div className="mt-4">
                   <Button asChild variant="outline">
@@ -240,14 +303,18 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
             <CardDescription>Retired work kept for context, not for daily focus.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3">
-            {archivedTasks.length ? (
-              archivedTasks.map((task) => (
+            {filteredArchivedTasks.length ? (
+              filteredArchivedTasks.map((task) => (
                 <div key={task.id} className="rounded-2xl border p-4">
                   <div className="flex flex-wrap items-center gap-2">
                     <Link href={`/tasks/${task.id}`} className="font-medium hover:underline">
                       {task.title}
                     </Link>
                     <PriorityBadge priority={task.priority} />
+                    <TaskTaxonomyBadges
+                      projectName={task.projectName}
+                      tagNames={task.tagNames}
+                    />
                     {task.recurrenceSummary ? (
                       <Badge variant="outline">{task.recurrenceSummary}</Badge>
                     ) : null}
@@ -255,11 +322,17 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
                   <p className="mt-2 text-sm text-muted-foreground">
                     {task.nextDue ? `Last projected for ${formatShortDate(task.nextDue)}` : "Archived task"}
                   </p>
-                  <div className="mt-3 flex gap-2">
+                  <div className="mt-3 flex flex-wrap gap-2">
                     <Button asChild variant="outline" size="sm">
                       <Link href={`/tasks/${task.id}#edit-task`}>Edit task</Link>
                     </Button>
-                    <form action={restoreTaskAction.bind(null, task.id, "/tasks?view=archived")}>
+                    <form
+                      action={restoreTaskAction.bind(
+                        null,
+                        task.id,
+                        buildFilterHref("/tasks", { ...filters, view: "archived" })
+                      )}
+                    >
                       <Button type="submit" size="sm">
                         Restore
                       </Button>
@@ -269,7 +342,9 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
               ))
             ) : (
               <div className="rounded-2xl border border-dashed p-6">
-                <p className="text-sm text-muted-foreground">No archived tasks yet.</p>
+                <p className="text-sm text-muted-foreground">
+                  {filtersApplied ? "No archived tasks match the current filters." : "No archived tasks yet."}
+                </p>
                 <div className="mt-4">
                   <Button asChild variant="outline">
                     <Link href="/tasks">Back to inbox</Link>

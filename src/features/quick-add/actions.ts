@@ -5,13 +5,13 @@ import { revalidateAppPaths } from "@/lib/revalidate";
 import { getQuickAddReferenceData, saveTaskInput } from "@/features/tasks/data";
 
 export async function submitGlobalQuickAddAction(rawInput: string) {
-  const { categories, members } = await getQuickAddReferenceData();
+  const { members, tags } = await getQuickAddReferenceData();
   const decision = decideQuickCaptureInput(rawInput, {
     members: members.map((member) => ({
       id: member.id,
       name: member.name,
     })),
-    categories,
+    tags,
   });
 
   if (decision.kind === "empty") {
@@ -32,7 +32,8 @@ export async function submitGlobalQuickAddAction(rawInput: string) {
     notes: null,
     dueDate: decision.draft.dueDate,
     priority: decision.draft.priority,
-    category: decision.draft.category,
+    projectName: decision.draft.projectName,
+    tagNames: decision.draft.tagNames,
     assigneeMemberId: decision.draft.assigneeMemberId,
     recurrence: decision.draft.recurrence,
   });

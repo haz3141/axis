@@ -7,28 +7,39 @@ import {
   recurrenceRules,
   taskActionUndos,
   taskOccurrenceLogs,
+  taskTags,
   tasks,
   type RecurrenceRuleRecord,
   type TaskActionUndoRecord,
   type TaskOccurrenceLogRecord,
+  type TaskTagRecord,
   type TaskRecord,
 } from "@/lib/db/schema";
 import { quickAddSuccessPath } from "@/features/quick-add/capture";
 import { revalidateAppPaths } from "@/lib/revalidate";
 import { buildTaskNoticeHref } from "@/features/tasks/lib/notices";
-import { parseTaskFormData } from "@/features/tasks/lib/form";
+import {
+  isTaskFormValidationError,
+  parseTaskFormData,
+  type TaskFormErrorCode,
+} from "@/features/tasks/lib/form";
 import {
   createQuickAddTasks,
-  getTaskDetail,
   getTaskWithRelations,
   saveTaskInput,
 } from "@/features/tasks/data";
+import {
+  readRecurrenceHistoryChoice,
+  recurrenceDraftFromRule,
+  resolveRecurrenceUpdateStrategy,
+} from "@/features/tasks/lib/recurrence-edit";
 import type { QuickAddDraft, TaskStatus } from "@/features/tasks/types";
 import type { TaskWithRelations } from "@/features/tasks/data";
 
 type TaskDeleteSnapshot = {
   task: TaskRecord;
   recurrenceRule: RecurrenceRuleRecord | null;
+  taskTags: TaskTagRecord[];
   occurrenceLogs: TaskOccurrenceLogRecord[];
 };
 
@@ -67,11 +78,20 @@ async function createTaskUndo<K extends TaskUndoKind>(
 }
 
 function taskRecordSnapshot(task: TaskWithRelations): TaskRecord {
-  const { assignee, occurrenceLogs, recurrenceRule, ...taskRecord } = task;
+  const {
+    assignee,
+    occurrenceLogs,
+    project,
+    recurrenceRule,
+    taskTags,
+    ...taskRecord
+  } = task;
 
   void assignee;
   void occurrenceLogs;
+  void project;
   void recurrenceRule;
+  void taskTags;
 
   return taskRecord;
 }
@@ -92,22 +112,111 @@ function redirectWithTaskNotice(
   redirect(buildTaskNoticeHref(returnTo, notice, undoId));
 }
 
+function taskFormErrorHref(path: string, error: TaskFormErrorCode) {
+  const [pathname, search = ""] = path.split("?");
+  const params = new URLSearchParams(search);
+  params.delete("notice");
+  params.delete("undo");
+  params.delete("confirm");
+  params.set("error", error);
+  const nextSearch = params.toString();
+  return nextSearch ? `${pathname}?${nextSearch}` : pathname;
+}
+
+function readTaskReturnTo(formData: FormData, fallback: string) {
+  const returnTo = formData.get("returnTo")?.toString().trim();
+  return returnTo || fallback;
+}
+
+function redirectWithTaskFormError(
+  returnTo: string,
+  error: TaskFormErrorCode
+): never {
+  redirect(taskFormErrorHref(returnTo, error));
+}
+
 export async function createTaskAction(formData: FormData) {
-  const taskId = await saveTaskInput(parseTaskFormData(formData));
+  const returnTo = readTaskReturnTo(formData, "/tasks");
+  let taskId: string;
+
+  try {
+    taskId = await saveTaskInput(parseTaskFormData(formData));
+  } catch (error) {
+    if (isTaskFormValidationError(error)) {
+      redirectWithTaskFormError(returnTo, error.code);
+    }
+
+    throw error;
+  }
+
   revalidateAppPaths(taskId);
   redirectWithTaskNotice(`/tasks/${taskId}`, "task-created");
 }
 
 export async function updateTaskAction(taskId: string, formData: FormData) {
-  const { task } = await getTaskDetail(taskId);
+  const task = await getTaskWithRelations(taskId);
 
   if (!task) {
     redirect("/tasks");
   }
 
-  await saveTaskInput(parseTaskFormData(formData), task);
-  revalidateAppPaths(taskId);
-  redirectWithTaskNotice(`/tasks/${taskId}`, "task-saved");
+  const returnTo = readTaskReturnTo(formData, `/tasks/${taskId}`);
+  const baseline = {
+    dueDate: task.dueDate,
+    recurrence: recurrenceDraftFromRule(task.recurrenceRule),
+    occurrenceCount: task.occurrenceLogs.length,
+  };
+  let input: ReturnType<typeof parseTaskFormData>;
+  let strategy: ReturnType<typeof resolveRecurrenceUpdateStrategy>;
+
+  try {
+    input = parseTaskFormData(formData);
+    strategy = resolveRecurrenceUpdateStrategy(
+      baseline,
+      {
+        dueDate: input.dueDate,
+        recurrence: input.recurrence,
+      },
+      readRecurrenceHistoryChoice(formData)
+    );
+  } catch (error) {
+    if (isTaskFormValidationError(error)) {
+      redirectWithTaskFormError(returnTo, error.code);
+    }
+
+    throw error;
+  }
+
+  switch (strategy) {
+    case "update-in-place": {
+      await saveTaskInput(input, task);
+      revalidateAppPaths(taskId);
+      redirectWithTaskNotice(`/tasks/${taskId}`, "task-saved");
+    }
+    case "reset-history": {
+      await saveTaskInput(input, task);
+      await db.delete(taskOccurrenceLogs).where(eq(taskOccurrenceLogs.taskId, taskId));
+      revalidateAppPaths(taskId);
+      redirectWithTaskNotice(`/tasks/${taskId}`, "task-history-reset");
+    }
+    case "fork-task": {
+      const newTaskId = await saveTaskInput(input);
+
+      await db
+        .update(tasks)
+        .set({
+          status: "archived",
+          updatedAt: new Date().toISOString(),
+        })
+        .where(eq(tasks.id, taskId));
+
+      revalidateAppPaths(taskId);
+      revalidateAppPaths(newTaskId);
+      redirectWithTaskNotice(`/tasks/${newTaskId}`, "task-recurrence-forked");
+    }
+    case "missing-choice":
+      redirectWithTaskFormError(returnTo, "recurrence-history-choice-required");
+  }
 }
 
 export async function deleteTaskAction(taskId: string, returnTo: string) {
@@ -121,6 +230,10 @@ export async function deleteTaskAction(taskId: string, returnTo: string) {
     snapshot: {
       task: taskRecordSnapshot(task),
       recurrenceRule: task.recurrenceRule,
+      taskTags: task.taskTags.map(({ tag: _tag, ...taskTag }) => {
+        void _tag;
+        return taskTag;
+      }),
       occurrenceLogs: task.occurrenceLogs,
     },
   });
@@ -225,7 +338,12 @@ export async function reopenTaskAction(taskId: string, returnTo: string) {
   redirectWithTaskNotice(returnTo, "task-reopened", undoId);
 }
 
-export async function toggleOccurrenceAction(taskId: string, scheduledFor: string, completed: boolean) {
+export async function toggleOccurrenceAction(
+  taskId: string,
+  scheduledFor: string,
+  completed: boolean,
+  returnTo: string
+) {
   if (completed) {
     await db
       .delete(taskOccurrenceLogs)
@@ -249,6 +367,10 @@ export async function toggleOccurrenceAction(taskId: string, scheduledFor: strin
   }
 
   revalidateAppPaths(taskId);
+  redirectWithTaskNotice(
+    returnTo,
+    completed ? "task-occurrence-reopened" : "task-occurrence-completed"
+  );
 }
 
 export async function undoTaskAction(undoId: string, returnTo: string) {
@@ -287,6 +409,10 @@ export async function undoTaskAction(undoId: string, returnTo: string) {
 
         if (payload.snapshot.recurrenceRule) {
           await tx.insert(recurrenceRules).values(payload.snapshot.recurrenceRule);
+        }
+
+        if (payload.snapshot.taskTags.length) {
+          await tx.insert(taskTags).values(payload.snapshot.taskTags);
         }
 
         if (payload.snapshot.occurrenceLogs.length) {

@@ -102,7 +102,13 @@ export function GlobalQuickAddLauncher() {
   return (
     <>
       <div className="mt-4 hidden lg:block">
-        <Button className="w-full justify-between" onClick={() => setOpen(true)}>
+        <Button
+          type="button"
+          className="w-full justify-between"
+          aria-haspopup="dialog"
+          aria-keyshortcuts="Q"
+          onClick={() => setOpen(true)}
+        >
           <span className="inline-flex items-center gap-2">
             <SparklesIcon className="size-4" />
             Quick capture
@@ -111,8 +117,15 @@ export function GlobalQuickAddLauncher() {
         </Button>
       </div>
 
-      <div className="fixed inset-x-4 bottom-4 z-40 lg:hidden">
-        <Button className="w-full shadow-lg" size="lg" onClick={() => setOpen(true)}>
+      <div className="fixed inset-x-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-40 lg:hidden">
+        <Button
+          type="button"
+          className="w-full shadow-lg"
+          size="lg"
+          aria-haspopup="dialog"
+          aria-label="Open quick capture"
+          onClick={() => setOpen(true)}
+        >
           <SparklesIcon className="size-4" />
           Capture task
         </Button>

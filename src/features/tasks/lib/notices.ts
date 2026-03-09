@@ -2,10 +2,14 @@ export const TASK_NOTICE_KEYS = [
   "task-created",
   "task-saved",
   "task-completed",
+  "task-occurrence-completed",
+  "task-occurrence-reopened",
   "task-archived",
   "task-reopened",
   "task-restored",
   "task-deleted",
+  "task-history-reset",
+  "task-recurrence-forked",
   "task-undo-applied",
 ] as const;
 
@@ -75,6 +79,12 @@ export function clearTaskNoticeHref(path: string) {
   });
 }
 
+export function clearTaskFormErrorHref(path: string) {
+  return updatePathSearchParams(path, (params) => {
+    params.delete("error");
+  });
+}
+
 export function buildTaskConfirmHref(path: string, confirm: TaskConfirmKey) {
   return updatePathSearchParams(path, (params) => {
     params.delete("notice");
@@ -124,6 +134,10 @@ export function taskNoticeCopy(notice: TaskNoticeKey) {
       return "Task saved.";
     case "task-completed":
       return "Task completed.";
+    case "task-occurrence-completed":
+      return "Occurrence completed.";
+    case "task-occurrence-reopened":
+      return "Occurrence marked active again.";
     case "task-archived":
       return "Task archived.";
     case "task-reopened":
@@ -132,6 +146,10 @@ export function taskNoticeCopy(notice: TaskNoticeKey) {
       return "Task restored.";
     case "task-deleted":
       return "Task deleted.";
+    case "task-history-reset":
+      return "Recurrence history reset and schedule updated.";
+    case "task-recurrence-forked":
+      return "History preserved on the archived task. The updated schedule continues on the new task.";
     case "task-undo-applied":
       return "Last change undone.";
   }

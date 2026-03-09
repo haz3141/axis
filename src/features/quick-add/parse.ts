@@ -7,7 +7,7 @@ export type QuickAddContext = {
     id: string;
     name: string;
   }>;
-  categories: string[];
+  tags: string[];
 };
 
 export const RECURRENCE_ANCHOR_MESSAGE =
@@ -291,46 +291,50 @@ function extractAssignee(text: string, context: QuickAddContext) {
   };
 }
 
-function extractCategory(text: string, context: QuickAddContext) {
-  const hashtagMatch = text.match(/#([a-z0-9-_]+)/i);
+function extractTags(text: string, context: QuickAddContext) {
+  const tagNames = new Map<string, string>();
+  const fragments: string[] = [];
 
-  if (hashtagMatch) {
-    return {
-      category: hashtagMatch[1].replace(/-/g, " "),
-      ambiguity: null,
-      fragments: [hashtagMatch[0]],
-    };
+  for (const match of text.matchAll(/#([a-z0-9-_]+)/gi)) {
+    const tagName = match[1]?.replace(/-/g, " ").trim();
+
+    if (!tagName) {
+      continue;
+    }
+
+    tagNames.set(tagName.toLowerCase(), tagName);
+    fragments.push(match[0]);
   }
 
   const normalizedText = text.toLowerCase();
-  const matchedCategory = context.categories.find((category) =>
-    new RegExp(`\\bin\\s+${escapeRegex(category)}\\b`, "i").test(normalizedText)
+  const matchedTag = context.tags.find((tag) =>
+    new RegExp(`\\bin\\s+${escapeRegex(tag)}\\b`, "i").test(normalizedText)
   );
 
-  if (matchedCategory) {
-    const fragment =
-      text.match(new RegExp(`\\bin\\s+${escapeRegex(matchedCategory)}\\b`, "i"))?.[0] ??
-      null;
+  if (matchedTag) {
+    const fragment = text.match(new RegExp(`\\bin\\s+${escapeRegex(matchedTag)}\\b`, "i"))?.[0];
 
-    return {
-      category: matchedCategory,
-      ambiguity: null,
-      fragments: fragment ? [fragment] : [],
-    };
+    if (fragment) {
+      fragments.push(fragment);
+    }
+
+    tagNames.set(matchedTag.toLowerCase(), matchedTag);
   }
 
-  if (/\bin\s+[a-z]/i.test(text)) {
+  const hasTagMention = tagNames.size > 0;
+
+  if (!hasTagMention && /\bin\s+[a-z]/i.test(text)) {
     return {
-      category: null,
-      ambiguity: "Category was mentioned but did not match an existing label.",
+      tagNames: [],
+      ambiguity: "Tag was mentioned but did not match an existing label.",
       fragments: [],
     };
   }
 
   return {
-    category: null,
+    tagNames: [...tagNames.values()],
     ambiguity: null,
-    fragments: [],
+    fragments,
   };
 }
 
@@ -375,15 +379,15 @@ export function parseQuickAddInput(input: string, context: QuickAddContext) {
     const parsedDate = findAnchorDateText(item, recurrenceMatch?.fragments ?? []);
     const dueDate = parsedDate?.start ? formatDateKey(parsedDate.start.date()) : null;
     const assigneeMatch = extractAssignee(item, context);
-    const categoryMatch = extractCategory(item, context);
+    const tagMatch = extractTags(item, context);
     const priorityMatch = extractPriority(item);
 
     if (assigneeMatch.ambiguity) {
       ambiguities.push(assigneeMatch.ambiguity);
     }
 
-    if (categoryMatch.ambiguity) {
-      ambiguities.push(categoryMatch.ambiguity);
+    if (tagMatch.ambiguity) {
+      ambiguities.push(tagMatch.ambiguity);
     }
 
     if (recurrenceMatch?.recurrence && !dueDate) {
@@ -394,7 +398,7 @@ export function parseQuickAddInput(input: string, context: QuickAddContext) {
       parsedDate?.text ?? null,
       ...(recurrenceMatch?.fragments ?? []),
       ...assigneeMatch.fragments,
-      ...categoryMatch.fragments,
+      ...tagMatch.fragments,
       priorityMatch.fragment,
     ]).replace(/^[:,\-]+|[:,\-]+$/g, "");
 
@@ -403,7 +407,8 @@ export function parseQuickAddInput(input: string, context: QuickAddContext) {
       title: cleanedTitle || item,
       dueDate,
       priority: priorityMatch.priority,
-      category: categoryMatch.category,
+      projectName: null,
+      tagNames: tagMatch.tagNames,
       assigneeMemberId: assigneeMatch.assigneeMemberId,
       assigneeLabel: assigneeMatch.assigneeLabel,
       recurrence: recurrenceMatch?.recurrence ?? null,

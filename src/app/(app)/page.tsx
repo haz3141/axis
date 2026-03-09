@@ -10,6 +10,7 @@ import {
 } from "@/features/tasks/actions";
 import { TaskActionNotice } from "@/features/tasks/components/task-action-notice";
 import { PriorityBadge } from "@/features/tasks/components/priority-badge";
+import { TaskTaxonomyBadges } from "@/features/tasks/components/task-taxonomy-badges";
 import { getDashboardData } from "@/features/tasks/data";
 import { formatShortDate } from "@/features/tasks/lib/dates";
 
@@ -42,7 +43,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             </p>
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             <Button asChild variant="outline">
               <Link href="/tasks">Review inbox</Link>
             </Button>
@@ -93,6 +94,10 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                         {item.title}
                       </Link>
                       <PriorityBadge priority={item.priority} />
+                      <TaskTaxonomyBadges
+                        projectName={item.projectName}
+                        tagNames={item.tagNames}
+                      />
                       {item.isRecurring ? <Badge variant="outline">Recurring</Badge> : null}
                       {item.assigneeName ? (
                         <Badge variant="secondary">{item.assigneeName}</Badge>
@@ -110,7 +115,8 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                             null,
                             item.taskId,
                             item.scheduledFor,
-                            item.completed
+                            item.completed,
+                            "/"
                           )
                         : item.completed
                           ? reopenTaskAction.bind(null, item.taskId, "/")
@@ -163,6 +169,10 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                         {item.title}
                       </Link>
                       <PriorityBadge priority={item.priority} />
+                      <TaskTaxonomyBadges
+                        projectName={item.projectName}
+                        tagNames={item.tagNames}
+                      />
                       <Badge variant="outline">{formatShortDate(item.scheduledFor)}</Badge>
                     </div>
                     <p className="mt-2 text-sm text-muted-foreground">
@@ -197,6 +207,12 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                         <Link href={`/tasks/${item.taskId}`} className="font-medium hover:underline">
                           {item.title}
                         </Link>
+                        <div className="flex flex-wrap gap-2">
+                          <TaskTaxonomyBadges
+                            projectName={item.projectName}
+                            tagNames={item.tagNames}
+                          />
+                        </div>
                         <p className="text-sm text-muted-foreground">
                           {item.recurrenceSummary ?? "One-time task"}
                         </p>

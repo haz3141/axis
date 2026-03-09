@@ -16,13 +16,13 @@ type QuickAddWorkspaceProps = QuickAddContext & {
 
 export function QuickAddWorkspace({
   members,
-  categories,
+  tags,
   action,
   initialInput = "",
 }: QuickAddWorkspaceProps) {
   const [input, setInput] = useState(initialInput);
   const [drafts, setDrafts] = useState<QuickAddDraft[]>(() =>
-    initialInput.trim() ? parseQuickAddInput(initialInput, { members, categories }) : []
+    initialInput.trim() ? parseQuickAddInput(initialInput, { members, tags }) : []
   );
   const [parsed, setParsed] = useState(Boolean(initialInput.trim()));
   const hasAmbiguities = drafts.some((draft) => draft.ambiguities.length > 0);
@@ -57,7 +57,7 @@ export function QuickAddWorkspace({
             <Button
               type="button"
               onClick={() => {
-                setDrafts(parseQuickAddInput(input, { members, categories }));
+                setDrafts(parseQuickAddInput(input, { members, tags }));
                 setParsed(true);
               }}
               disabled={!input.trim()}
@@ -81,7 +81,7 @@ export function QuickAddWorkspace({
             <p>Recurrence supports every N days, weeks, months, and multi-weekday phrases.</p>
             <p>Recurring drafts still need a clear anchor date before they can be created.</p>
             <p>Assignees only resolve against the household roster.</p>
-            <p>Categories resolve from hashtags or known labels.</p>
+            <p>Tags resolve from hashtags or known labels.</p>
           </CardContent>
         </Card>
 
@@ -104,7 +104,11 @@ export function QuickAddWorkspace({
                         {draft.assigneeLabel ? (
                           <Badge variant="outline">{draft.assigneeLabel}</Badge>
                         ) : null}
-                        {draft.category ? <Badge variant="outline">#{draft.category}</Badge> : null}
+                        {draft.tagNames.map((tagName) => (
+                          <Badge key={tagName} variant="outline">
+                            #{tagName}
+                          </Badge>
+                        ))}
                         {draft.priority ? (
                           <Badge variant="outline">{draft.priority} priority</Badge>
                         ) : null}

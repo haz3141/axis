@@ -4,22 +4,76 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { TaskActionNotice } from "@/features/tasks/components/task-action-notice";
+import { TaskFilterForm } from "@/features/tasks/components/task-filter-form";
 import { PriorityBadge } from "@/features/tasks/components/priority-badge";
+import { TaskTaxonomyBadges } from "@/features/tasks/components/task-taxonomy-badges";
 import { getUpcomingData } from "@/features/tasks/data";
 import { formatLongDate, formatShortDate } from "@/features/tasks/lib/dates";
+import {
+  buildFilterHref,
+  filterAgendaItems,
+  normalizeUpcomingView,
+  readTaskFilterState,
+} from "@/features/tasks/lib/filters";
 
 export const dynamic = "force-dynamic";
 
 type UpcomingPageProps = {
   searchParams: Promise<{
+    view?: string;
+    q?: string;
+    project?: string;
+    tag?: string;
+    priority?: string;
+    assignee?: string;
     notice?: string;
     undo?: string;
   }>;
 };
 
+const viewCopy = {
+  all: {
+    title: "Upcoming",
+    description: "Future-dated one-time tasks and projected recurring work through the current planning window.",
+  },
+  "one-time": {
+    title: "Upcoming one-time work",
+    description: "Future one-off tasks that need planning without recurring routines mixed in.",
+  },
+  recurring: {
+    title: "Upcoming recurring work",
+    description: "Projected recurring routines that are coming next.",
+  },
+} as const;
+
+function hasActiveFilters(filters: {
+  q: string;
+  project: string;
+  tag: string;
+  priority: string;
+  assignee: string;
+}) {
+  return Boolean(
+    filters.q || filters.project || filters.tag || filters.priority || filters.assignee
+  );
+}
+
 export default async function UpcomingPage({ searchParams }: UpcomingPageProps) {
   const resolvedSearchParams = await searchParams;
   const upcoming = await getUpcomingData();
+  const filters = readTaskFilterState(resolvedSearchParams, normalizeUpcomingView);
+  const filteredItems = filterAgendaItems(upcoming.items, filters);
+  const filtersApplied = hasActiveFilters(filters);
+  const filteredOneTimeCount = filteredItems.filter((item) => !item.isRecurring).length;
+  const filteredRecurringCount = filteredItems.filter((item) => item.isRecurring).length;
+  const clearHref = buildFilterHref("/upcoming", {
+    ...filters,
+    q: "",
+    project: "",
+    tag: "",
+    priority: "",
+    assignee: "",
+  });
 
   return (
     <div className="grid gap-6">
@@ -29,14 +83,13 @@ export default async function UpcomingPage({ searchParams }: UpcomingPageProps) 
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-2">
             <p className="text-sm font-medium text-muted-foreground">Focus workspace</p>
-            <h2 className="text-3xl font-semibold tracking-tight">Upcoming</h2>
+            <h2 className="text-3xl font-semibold tracking-tight">{viewCopy[filters.view].title}</h2>
             <p className="max-w-2xl text-sm text-muted-foreground">
-              Future-dated one-time tasks and projected recurring work through{" "}
-              {formatLongDate(upcoming.projectionEnd)}.
+              {viewCopy[filters.view].description} Through {formatLongDate(upcoming.projectionEnd)}.
             </p>
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             <Button asChild variant="outline">
               <Link href="/tasks">Open inbox</Link>
             </Button>
@@ -46,17 +99,51 @@ export default async function UpcomingPage({ searchParams }: UpcomingPageProps) 
           </div>
         </div>
 
+        <div className="flex flex-wrap gap-2">
+          {[
+            ["all", "All", filteredItems.length],
+            ["one-time", "One-time", filteredOneTimeCount],
+            ["recurring", "Recurring", filteredRecurringCount],
+          ].map(([value, label, count]) => (
+            <Button
+              key={value}
+              asChild
+              variant={filters.view === value ? "default" : "outline"}
+              size="sm"
+            >
+              <Link
+                href={buildFilterHref("/upcoming", {
+                  ...filters,
+                  view: value as typeof filters.view,
+                })}
+              >
+                {label}
+                <Badge variant={filters.view === value ? "secondary" : "outline"}>{count}</Badge>
+              </Link>
+            </Button>
+          ))}
+        </div>
+
+        <TaskFilterForm
+          clearHref={clearHref}
+          filters={filters}
+          members={upcoming.members}
+          pathname="/upcoming"
+          projects={upcoming.projects}
+          tags={upcoming.tags}
+        />
+
         <div className="grid gap-4 md:grid-cols-2">
           <Card className="gap-4">
             <CardHeader className="gap-1">
               <CardDescription>Future one-time tasks</CardDescription>
-              <CardTitle className="text-3xl">{upcoming.stats.oneTime}</CardTitle>
+              <CardTitle className="text-3xl">{filteredOneTimeCount}</CardTitle>
             </CardHeader>
           </Card>
           <Card className="gap-4">
             <CardHeader className="gap-1">
               <CardDescription>Recurring occurrences</CardDescription>
-              <CardTitle className="text-3xl">{upcoming.stats.recurring}</CardTitle>
+              <CardTitle className="text-3xl">{filteredRecurringCount}</CardTitle>
             </CardHeader>
           </Card>
         </div>
@@ -70,8 +157,8 @@ export default async function UpcomingPage({ searchParams }: UpcomingPageProps) 
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3">
-          {upcoming.items.length ? (
-            upcoming.items.map((item) => (
+          {filteredItems.length ? (
+            filteredItems.map((item) => (
               <div
                 key={item.key}
                 className="flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between"
@@ -82,6 +169,10 @@ export default async function UpcomingPage({ searchParams }: UpcomingPageProps) 
                       {item.title}
                     </Link>
                     <PriorityBadge priority={item.priority} />
+                    <TaskTaxonomyBadges
+                      projectName={item.projectName}
+                      tagNames={item.tagNames}
+                    />
                     {item.isRecurring ? <Badge variant="outline">Recurring</Badge> : null}
                     {item.assigneeName ? <Badge variant="secondary">{item.assigneeName}</Badge> : null}
                   </div>
@@ -104,7 +195,9 @@ export default async function UpcomingPage({ searchParams }: UpcomingPageProps) 
           ) : (
             <div className="rounded-2xl border border-dashed p-6">
               <p className="text-sm text-muted-foreground">
-                Nothing is queued in the next 30 days. Capture something new or plan from the inbox.
+                {filtersApplied
+                  ? "No upcoming work matches the current filters."
+                  : "Nothing is queued in the next 30 days. Capture something new or plan from the inbox."}
               </p>
               <div className="mt-4 flex gap-3">
                 <Button asChild variant="outline">

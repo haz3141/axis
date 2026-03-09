@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildTaskConfirmHref,
   buildTaskNoticeHref,
+  clearTaskFormErrorHref,
   clearTaskConfirmHref,
   clearTaskNoticeHref,
   readTaskConfirm,
@@ -38,6 +39,13 @@ test("task confirm helpers clear stale notice state", () => {
   );
 });
 
+test("task form error helper removes stale error state", () => {
+  assert.equal(
+    clearTaskFormErrorHref("/tasks/abc?view=inbox&error=recurrence-anchor-required"),
+    "/tasks/abc?view=inbox"
+  );
+});
+
 test("task notice readers ignore invalid values", () => {
   assert.equal(readTaskNotice({}), null);
   assert.equal(readTaskNotice({ notice: "bogus" }), null);
@@ -52,4 +60,5 @@ test("task confirm reader and copy return stable values", () => {
   assert.equal(readTaskConfirm({ confirm: "delete" }), "delete");
   assert.equal(readTaskConfirm({ confirm: "other" }), null);
   assert.equal(taskNoticeCopy("task-undo-applied"), "Last change undone.");
+  assert.equal(taskNoticeCopy("task-occurrence-completed"), "Occurrence completed.");
 });

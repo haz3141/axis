@@ -8,7 +8,7 @@ import {
 
 const context = {
   members: [{ id: "maya", name: "Maya" }],
-  categories: ["work"],
+  tags: ["work"],
 };
 
 test("decideQuickCaptureInput creates a single clear draft inline", () => {
@@ -62,7 +62,8 @@ test("quickAddSuccessPath routes scheduled drafts to upcoming", () => {
         title: "Pay rent",
         dueDate: "2026-03-01",
         priority: null,
-        category: null,
+        projectName: null,
+        tagNames: [],
         assigneeMemberId: null,
         assigneeLabel: null,
         recurrence: null,

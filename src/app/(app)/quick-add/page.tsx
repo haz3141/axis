@@ -13,7 +13,7 @@ type QuickAddPageProps = {
 
 export default async function QuickAddPage({ searchParams }: QuickAddPageProps) {
   const params = await searchParams;
-  const { categories, members } = await getQuickAddReferenceData();
+  const { members, tags } = await getQuickAddReferenceData();
   const initialInput = params.input?.toString() ?? "";
 
   return (
@@ -29,7 +29,7 @@ export default async function QuickAddPage({ searchParams }: QuickAddPageProps) 
           <QuickAddWorkspace
             key={initialInput}
             members={members.map((member) => ({ id: member.id, name: member.name }))}
-            categories={categories}
+            tags={tags}
             action={createQuickAddTasksAction}
             initialInput={initialInput}
           />

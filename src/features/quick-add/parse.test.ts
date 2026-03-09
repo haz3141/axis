@@ -7,7 +7,7 @@ const context = {
     { id: "maya", name: "Maya" },
     { id: "ezra", name: "Ezra" },
   ],
-  categories: ["home", "errands"],
+  tags: ["home", "errands"],
 };
 
 test("parseQuickAddInput extracts deterministic task fields and cleans the title", () => {
@@ -20,7 +20,8 @@ test("parseQuickAddInput extracts deterministic task fields and cleans the title
   assert.equal(draft.title, "Laundry");
   assert.equal(draft.dueDate, "2026-03-14");
   assert.equal(draft.priority, "high");
-  assert.equal(draft.category, "home");
+  assert.deepStrictEqual(draft.tagNames, ["home"]);
+  assert.equal(draft.projectName, null);
   assert.equal(draft.assigneeMemberId, "maya");
   assert.equal(draft.assigneeLabel, "Maya");
   assert.deepEqual(draft.recurrence, {

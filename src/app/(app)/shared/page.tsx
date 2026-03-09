@@ -7,6 +7,7 @@ import {
   reopenTaskAction,
 } from "@/features/tasks/actions";
 import { TaskActionNotice } from "@/features/tasks/components/task-action-notice";
+import { TaskTaxonomyBadges } from "@/features/tasks/components/task-taxonomy-badges";
 import { getSharedData } from "@/features/tasks/data";
 import { formatShortDate } from "@/features/tasks/lib/dates";
 
@@ -57,9 +58,10 @@ export default async function SharedPage({ searchParams }: SharedPageProps) {
                       {task.isRecurring ? (
                         <Badge variant="outline">{task.recurrenceSummary}</Badge>
                       ) : null}
-                      {task.category ? (
-                        <Badge variant="outline">#{task.category}</Badge>
-                      ) : null}
+                      <TaskTaxonomyBadges
+                        projectName={task.projectName}
+                        tagNames={task.tagNames}
+                      />
                     </div>
 
                     <p className="mt-2 text-sm text-muted-foreground">

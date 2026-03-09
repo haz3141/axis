@@ -29,7 +29,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 py-4 sm:px-6 lg:flex-row lg:px-8">
+      <a
+        href="#main-content"
+        className="sr-only absolute left-4 top-4 z-50 rounded-md bg-background px-3 py-2 text-sm font-medium text-foreground shadow-sm focus:not-sr-only"
+      >
+        Skip to content
+      </a>
+
+      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 py-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 lg:flex-row lg:px-8 lg:pb-4">
         <aside className="w-full shrink-0 rounded-3xl border bg-card p-4 lg:w-72">
           <div className="space-y-1 border-b border-border pb-4">
             <p className="text-sm font-medium text-muted-foreground">Axis</p>
@@ -41,7 +48,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           <GlobalQuickAddLauncher />
 
-          <nav className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+          <nav aria-label="Primary" className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
             {navigationItems.map((item) => {
               const isActive =
                 item.href === "/" ? pathname === item.href : pathname.startsWith(item.href);
@@ -66,7 +73,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
         </aside>
 
-        <main className="min-w-0 flex-1">{children}</main>
+        <main id="main-content" className="min-w-0 flex-1">
+          {children}
+        </main>
       </div>
     </div>
   );
