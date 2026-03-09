@@ -278,6 +278,23 @@ Branch: `feat/capture-focus-pass1`
   - App-shell loading UI exists for focus routes.
   - Today, Inbox, Completed, Archived, and Upcoming now have explicit empty states with next actions.
 
+## Repo State After PASS 2
+
+- Task execution surface:
+  - `/tasks/[taskId]` is now execution-first with quick actions, execution context, destructive confirmations, and the edit form anchored below at `#edit-task`.
+  - One-time tasks can complete or reopen from detail; archived tasks can restore from detail or from `/tasks?view=archived`.
+  - Recurring detail pages now explain next due, recent occurrence history, projected upcoming dates, and anchor-date semantics.
+- Redirect-backed notices / undo:
+  - Lightweight task notices now render on `/`, `/tasks`, `/tasks/[taskId]`, `/upcoming`, `/calendar`, and `/shared`.
+  - Complete, archive, reopen, restore, and delete now redirect with explicit notice copy.
+  - One-step undo is backed by the new `task_action_undos` table.
+- List execution entry points:
+  - Today, Inbox, Completed, Archived, Upcoming, Calendar agenda, and Shared now expose direct edit and/or recovery actions without forcing users through the old detail-first flow.
+  - Calendar and Shared now pass explicit return paths to task actions so notice redirects land back on the originating route.
+- Testing / support code:
+  - Notice/query-param behavior is covered in `src/features/tasks/lib/notices.test.ts`.
+  - Recurring execution-state derivation is now isolated in `src/features/tasks/lib/execution.ts` with unit coverage in `src/features/tasks/lib/execution.test.ts`.
+
 ## Progress
 
 - [x] Repo discovery completed.
@@ -288,6 +305,8 @@ Branch: `feat/capture-focus-pass1`
 - [x] PASS 0 validation complete.
 - [x] PASS 1 implementation complete.
 - [x] PASS 1 validation complete.
+- [x] PASS 2 implementation complete.
+- [x] PASS 2 validation complete.
 
 ## Decision Log
 
@@ -298,6 +317,10 @@ Branch: `feat/capture-focus-pass1`
   - Reason: minimal tooling expansion while preserving TypeScript tests and path-alias support.
 - 2026-03-09: Guard quick-add anchor dates against chrono matches embedded inside recurrence phrases so `every weekday` does not fabricate a due date.
 - 2026-03-09: Reuse the existing shell capture decision helper and server action that appeared during implementation instead of introducing a second global quick-capture pathway.
+- 2026-03-09: Use a dedicated `task_action_undos` table for redirect-backed task undo.
+  - Reason: the repo has no flash/session transport today, and delete/archive/complete/reopen need a one-step undo that survives a redirect without inventing client-only state.
+- 2026-03-09: Extract recurring execution-state derivation into `src/features/tasks/lib/execution.ts`.
+  - Reason: the detail page and focus surfaces need shared next-due/history logic, and the helper is pure enough to unit test directly.
 
 ## Surprises / Discoveries
 
@@ -305,6 +328,7 @@ Branch: `feat/capture-focus-pass1`
 - There is no unit-test harness despite parser/recurrence logic being pure enough to test easily.
 - `/tasks` currently mixes manual entry, active tasks, completed tasks, and archived tasks into one page, so PASS 1 needs a data-shape cleanup as well as UI changes.
 - `chrono-node` will match recurrence-only text like `weekday`, so the parser needed an explicit guard to preserve the repo's clear-anchor recurrence rule.
+- PASS 2 touched more routes than just `/tasks/[taskId]` because the new action signatures required explicit return paths anywhere complete/reopen actions were already exposed.
 
 ## Validation Evidence
 
@@ -323,6 +347,20 @@ Branch: `feat/capture-focus-pass1`
   - `pnpm test:unit`: passed on local Node 25.7.0.
   - `pnpm build`: passed on local Node 25.7.0 after `pnpm db:migrate`.
   - Runtime smoke fetches: `GET /`, `GET /tasks`, `GET /upcoming`, and `GET /quick-add?input=...` all returned HTTP 200 from `pnpm start` on `127.0.0.1:3100`.
+- PASS 2 after task execution / undo work:
+  - `pnpm db:generate`: passed and created `drizzle/0002_perpetual_talon.sql`.
+  - `pnpm typecheck`: passed on local Node 25.7.0.
+  - `pnpm test:unit`: passed on local Node 25.7.0.
+  - `pnpm lint`: passed on local Node 25.7.0 after warning cleanup.
+  - `pnpm build`: passed on local Node 25.7.0 after `pnpm db:migrate`.
+  - Runtime smoke fetches from `pnpm start --hostname 127.0.0.1 --port 3020` all returned HTTP 200 for:
+    - `/`
+    - `/tasks`
+    - `/upcoming`
+    - `/quick-add?input=Plan%20me`
+    - `/shared?notice=task-completed&undo=undo-1`
+    - `/calendar?notice=task-completed&undo=undo-1`
+    - `/tasks/1aa11d30-7529-47ef-ac05-1423a80c7b83?notice=task-saved`
 - Every command emitted the expected engine warning because the repo targets Node 24.x while the current shell is Node 25.7.0.
 
 ## Risks
@@ -330,13 +368,14 @@ Branch: `feat/capture-focus-pass1`
 - Node 25 local execution may mask issues not seen on Node 24 CI, especially around toolchain flags.
 - Global quick capture touches shared shell code; keyboard behavior must avoid interfering with text inputs.
 - Route focus changes risk hiding tasks if selectors are wrong; add unit coverage before shipping.
+- PASS 2 runtime validation is route-level only; keyboard-only browser QA for the new notice/undo controls and mobile spacing is still limited to code review in this run.
 
 ## Remaining Queue
 
-- PASS 2: refactor `/tasks/[taskId]` into a stronger execution surface with quick actions first.
-- PASS 2: add lightweight redirect-backed notices or another minimal undo/flash pattern for complete, archive, reopen, and delete.
-- PASS 2: add quick edit entry points from lists and tighten destructive-action safety.
-- PASS 2: explain recurring-task detail semantics more clearly on the task detail page.
+- PASS 3: add projects, tags, and local-first task filtering/search.
+- PASS 3: define safe category -> tags migration behavior while preserving rollout compatibility.
+- PASS 4: improve recurrence editing UX and require explicit history handling when rule semantics would reinterpret old logs.
+- PASS 5: complete keyboard, mobile, and accessibility QA across dialogs, shell navigation, calendar, and task actions.
 
 ## Final Checkpoint Summary
 
@@ -349,3 +388,8 @@ Branch: `feat/capture-focus-pass1`
   - Added `/upcoming`.
   - Reworked `/tasks` into an inbox-first workspace with query-param closed views.
   - Expanded deterministic recurrence parsing and prefilled `/quick-add` review.
+- PASS 2 complete:
+  - Refactored `/tasks/[taskId]` into an execution-first surface with detail explanations and destructive confirmations.
+  - Added redirect-backed task notices plus one-step undo backed by `task_action_undos`.
+  - Added direct edit/recovery actions across focus, shared, and calendar task lists.
+  - Added PASS 2 unit coverage for notice helpers and recurring execution-state derivation.

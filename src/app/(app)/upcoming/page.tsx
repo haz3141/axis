@@ -3,17 +3,28 @@ import { ArrowRightIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { TaskActionNotice } from "@/features/tasks/components/task-action-notice";
 import { PriorityBadge } from "@/features/tasks/components/priority-badge";
 import { getUpcomingData } from "@/features/tasks/data";
 import { formatLongDate, formatShortDate } from "@/features/tasks/lib/dates";
 
 export const dynamic = "force-dynamic";
 
-export default async function UpcomingPage() {
+type UpcomingPageProps = {
+  searchParams: Promise<{
+    notice?: string;
+    undo?: string;
+  }>;
+};
+
+export default async function UpcomingPage({ searchParams }: UpcomingPageProps) {
+  const resolvedSearchParams = await searchParams;
   const upcoming = await getUpcomingData();
 
   return (
     <div className="grid gap-6">
+      <TaskActionNotice pathname="/upcoming" searchParams={resolvedSearchParams} />
+
       <section className="flex flex-col gap-4 rounded-3xl border bg-card p-6 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-2">
@@ -82,8 +93,8 @@ export default async function UpcomingPage() {
                 <div className="flex items-center gap-3">
                   <Badge variant="outline">{formatShortDate(item.scheduledFor)}</Badge>
                   <Button asChild variant="outline">
-                    <Link href={`/tasks/${item.taskId}`}>
-                      Open details
+                    <Link href={`/tasks/${item.taskId}#edit-task`}>
+                      Edit
                       <ArrowRightIcon className="size-4" />
                     </Link>
                   </Button>

@@ -20,11 +20,11 @@ import {
 } from "@/features/tasks/lib/dates";
 import {
   describeRecurrence,
-  nextOccurrence,
   projectOccurrences,
   serializeDaysOfWeek,
   type RecurrenceRuleShape,
 } from "@/features/tasks/lib/recurrence";
+import { getTaskExecutionState, getTaskNextDue } from "@/features/tasks/lib/execution";
 import { compareAgendaItemsByFocus } from "@/features/tasks/lib/focus";
 import type { AgendaItem, DisplayTask, QuickAddDraft, TaskInput } from "@/features/tasks/types";
 
@@ -54,24 +54,6 @@ function uniqueCategories(taskRows: TaskWithRelations[]) {
   );
 }
 
-function taskNextDue(task: TaskWithRelations, start = todayKey()) {
-  if (!task.recurrenceRule) {
-    return task.dueDate;
-  }
-
-  if (!task.dueDate || task.status === "archived") {
-    return null;
-  }
-
-  return nextOccurrence(
-    task.dueDate,
-    recurrenceShape(task.recurrenceRule),
-    start,
-    365,
-    new Set(task.occurrenceLogs.map((log) => log.scheduledFor))
-  );
-}
-
 function toDisplayTask(task: TaskWithRelations): DisplayTask {
   return {
     id: task.id,
@@ -84,7 +66,7 @@ function toDisplayTask(task: TaskWithRelations): DisplayTask {
     assigneeMemberId: task.assigneeMemberId,
     isRecurring: isRecurringTask(task),
     recurrenceSummary: describeRecurrence(task.recurrenceRule, task.dueDate),
-    nextDue: taskNextDue(task),
+    nextDue: getTaskNextDue(task),
     notes: task.notes,
     completedAt: task.completedAt,
   };
@@ -167,6 +149,19 @@ async function loadTasks() {
     profile,
     tasks: taskRows,
   };
+}
+
+export async function getTaskWithRelations(taskId: string) {
+  return db.query.tasks.findFirst({
+    where: eq(tasks.id, taskId),
+    with: {
+      assignee: true,
+      recurrenceRule: true,
+      occurrenceLogs: {
+        orderBy: (_, { desc }) => [desc(taskOccurrenceLogs.scheduledFor)],
+      },
+    },
+  });
 }
 
 async function upsertRecurrence(taskId: string, recurrence: TaskInput["recurrence"]) {
@@ -270,16 +265,17 @@ export async function getTasksPageData() {
 }
 
 export async function getTaskDetail(taskId: string) {
-  const [{ tasks: taskRows }, members] = await Promise.all([
+  const [{ tasks: taskRows }, members, task] = await Promise.all([
     loadTasks(),
     getHouseholdMembers(),
+    getTaskWithRelations(taskId),
   ]);
-  const task = taskRows.find((candidate) => candidate.id === taskId) ?? null;
 
   return {
     task,
     members,
     categories: uniqueCategories(taskRows),
+    executionState: task ? getTaskExecutionState(task) : null,
   };
 }
 

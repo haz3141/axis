@@ -89,6 +89,16 @@ export const taskOccurrenceLogs = sqliteTable(
   })
 );
 
+export const taskActionUndos = sqliteTable("task_action_undos", {
+  id: text("id").primaryKey(),
+  taskId: text("task_id").notNull(),
+  kind: text("kind", {
+    enum: ["complete", "archive", "restore", "reopen", "delete"],
+  }).notNull(),
+  payload: text("payload").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const profilesRelations = relations(profiles, ({ many }) => ({
   householdMembers: many(householdMembers),
   tasks: many(tasks),
@@ -150,3 +160,4 @@ export type NewTaskRecord = typeof tasks.$inferInsert;
 export type RecurrenceRuleRecord = typeof recurrenceRules.$inferSelect;
 export type NewRecurrenceRuleRecord = typeof recurrenceRules.$inferInsert;
 export type TaskOccurrenceLogRecord = typeof taskOccurrenceLogs.$inferSelect;
+export type TaskActionUndoRecord = typeof taskActionUndos.$inferSelect;

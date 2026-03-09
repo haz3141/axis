@@ -8,17 +8,28 @@ import {
   reopenTaskAction,
   toggleOccurrenceAction,
 } from "@/features/tasks/actions";
+import { TaskActionNotice } from "@/features/tasks/components/task-action-notice";
 import { PriorityBadge } from "@/features/tasks/components/priority-badge";
 import { getDashboardData } from "@/features/tasks/data";
 import { formatShortDate } from "@/features/tasks/lib/dates";
 
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage() {
+type DashboardPageProps = {
+  searchParams: Promise<{
+    notice?: string;
+    undo?: string;
+  }>;
+};
+
+export default async function DashboardPage({ searchParams }: DashboardPageProps) {
+  const resolvedSearchParams = await searchParams;
   const dashboard = await getDashboardData();
 
   return (
     <div className="grid gap-6">
+      <TaskActionNotice pathname="/" searchParams={resolvedSearchParams} />
+
       <section className="flex flex-col gap-4 rounded-3xl border bg-card p-6 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-2">
@@ -102,13 +113,18 @@ export default async function DashboardPage() {
                             item.completed
                           )
                         : item.completed
-                          ? reopenTaskAction.bind(null, item.taskId)
-                          : completeTaskAction.bind(null, item.taskId)
+                          ? reopenTaskAction.bind(null, item.taskId, "/")
+                          : completeTaskAction.bind(null, item.taskId, "/")
                     }
                   >
-                    <Button type="submit" variant={item.completed ? "outline" : "default"}>
-                      {item.completed ? "Undo" : "Complete"}
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button asChild variant="outline">
+                        <Link href={`/tasks/${item.taskId}#edit-task`}>Edit</Link>
+                      </Button>
+                      <Button type="submit" variant={item.completed ? "outline" : "default"}>
+                        {item.completed ? "Undo" : "Complete"}
+                      </Button>
+                    </div>
                   </form>
                 </div>
               ))
@@ -152,6 +168,11 @@ export default async function DashboardPage() {
                     <p className="mt-2 text-sm text-muted-foreground">
                       {item.assigneeName ? `Assigned to ${item.assigneeName}` : "Owned by you"}
                     </p>
+                    <div className="mt-3">
+                      <Button asChild variant="outline" size="sm">
+                        <Link href={`/tasks/${item.taskId}#edit-task`}>Edit task</Link>
+                      </Button>
+                    </div>
                   </div>
                 ))
               ) : (
@@ -183,6 +204,9 @@ export default async function DashboardPage() {
                       <div className="flex flex-col items-end gap-2">
                         <PriorityBadge priority={item.priority} />
                         <Badge variant="outline">{formatShortDate(item.scheduledFor)}</Badge>
+                        <Button asChild variant="outline" size="sm">
+                          <Link href={`/tasks/${item.taskId}#edit-task`}>Edit</Link>
+                        </Button>
                       </div>
                     </div>
                   </div>

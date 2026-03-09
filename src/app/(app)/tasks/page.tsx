@@ -6,7 +6,9 @@ import {
   completeTaskAction,
   createTaskAction,
   reopenTaskAction,
+  restoreTaskAction,
 } from "@/features/tasks/actions";
+import { TaskActionNotice } from "@/features/tasks/components/task-action-notice";
 import { TaskForm } from "@/features/tasks/components/task-form";
 import { PriorityBadge } from "@/features/tasks/components/priority-badge";
 import { getTasksPageData } from "@/features/tasks/data";
@@ -23,6 +25,8 @@ export const dynamic = "force-dynamic";
 type TasksPageProps = {
   searchParams: Promise<{
     view?: string;
+    notice?: string;
+    undo?: string;
   }>;
 };
 
@@ -51,6 +55,8 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
 
   return (
     <div className="grid gap-6">
+      <TaskActionNotice pathname="/tasks" searchParams={params} />
+
       <section className="flex flex-col gap-4 rounded-3xl border bg-card p-6 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-2">
@@ -125,9 +131,14 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
                       </p>
                     </div>
 
-                    <form action={completeTaskAction.bind(null, task.id)}>
-                      <Button type="submit">Complete</Button>
-                    </form>
+                    <div className="flex gap-2">
+                      <Button asChild variant="outline">
+                        <Link href={`/tasks/${task.id}#edit-task`}>Edit</Link>
+                      </Button>
+                      <form action={completeTaskAction.bind(null, task.id, "/tasks")}>
+                        <Button type="submit">Complete</Button>
+                      </form>
+                    </div>
                   </div>
                 ))
               ) : (
@@ -194,11 +205,16 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
                     </p>
                   </div>
 
-                  <form action={reopenTaskAction.bind(null, task.id)}>
-                    <Button type="submit" variant="outline">
-                      Reopen
+                  <div className="flex gap-2">
+                    <Button asChild variant="outline">
+                      <Link href={`/tasks/${task.id}#edit-task`}>Edit</Link>
                     </Button>
-                  </form>
+                    <form action={reopenTaskAction.bind(null, task.id, "/tasks?view=completed")}>
+                      <Button type="submit" variant="outline">
+                        Reopen
+                      </Button>
+                    </form>
+                  </div>
                 </div>
               ))
             ) : (
@@ -239,6 +255,16 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
                   <p className="mt-2 text-sm text-muted-foreground">
                     {task.nextDue ? `Last projected for ${formatShortDate(task.nextDue)}` : "Archived task"}
                   </p>
+                  <div className="mt-3 flex gap-2">
+                    <Button asChild variant="outline" size="sm">
+                      <Link href={`/tasks/${task.id}#edit-task`}>Edit task</Link>
+                    </Button>
+                    <form action={restoreTaskAction.bind(null, task.id, "/tasks?view=archived")}>
+                      <Button type="submit" size="sm">
+                        Restore
+                      </Button>
+                    </form>
+                  </div>
                 </div>
               ))
             ) : (

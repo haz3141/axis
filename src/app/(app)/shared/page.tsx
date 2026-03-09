@@ -6,16 +6,28 @@ import {
   completeTaskAction,
   reopenTaskAction,
 } from "@/features/tasks/actions";
+import { TaskActionNotice } from "@/features/tasks/components/task-action-notice";
 import { getSharedData } from "@/features/tasks/data";
 import { formatShortDate } from "@/features/tasks/lib/dates";
 
 export const dynamic = "force-dynamic";
 
-export default async function SharedPage() {
+type SharedPageProps = {
+  searchParams: Promise<{
+    notice?: string;
+    undo?: string;
+  }>;
+};
+
+export default async function SharedPage({ searchParams }: SharedPageProps) {
+  const params = await searchParams;
   const sharedData = await getSharedData();
+  const returnTo = "/shared";
 
   return (
     <div className="grid gap-6">
+      <TaskActionNotice pathname="/shared" searchParams={params} />
+
       <Card>
         <CardHeader>
           <CardTitle>Shared / assigned</CardTitle>
@@ -61,18 +73,22 @@ export default async function SharedPage() {
                     </p>
 
                     {!task.isRecurring ? (
-                      <form
-                        action={
-                          task.status === "completed"
-                            ? reopenTaskAction.bind(null, task.id)
-                            : completeTaskAction.bind(null, task.id)
-                        }
-                        className="mt-3"
-                      >
-                        <Button type="submit" variant="outline">
-                          {task.status === "completed" ? "Reopen" : "Complete"}
+                      <div className="mt-3 flex gap-2">
+                        <Button asChild variant="outline">
+                          <Link href={`/tasks/${task.id}#edit-task`}>Edit</Link>
                         </Button>
-                      </form>
+                        <form
+                          action={
+                            task.status === "completed"
+                              ? reopenTaskAction.bind(null, task.id, returnTo)
+                              : completeTaskAction.bind(null, task.id, returnTo)
+                          }
+                        >
+                          <Button type="submit" variant="outline">
+                            {task.status === "completed" ? "Reopen" : "Complete"}
+                          </Button>
+                        </form>
+                      </div>
                     ) : null}
                   </div>
                 ))
