@@ -5,9 +5,10 @@ Branch: `feat/capture-focus-pass1`
 
 ## Goals
 
-- Strengthen the core Axis loop: Capture -> Organize -> Focus -> Complete -> Review.
-- In this run, complete repo discovery, PASS 0, and PASS 1, then stop at a validated checkpoint.
-- Preserve current routes, task primitives, and recurrence semantics unless discovery proves a change is necessary.
+- Strengthen the Axis core loop: Capture -> Organize -> Focus -> Complete -> Review.
+- Keep the app shippable at each checkpoint.
+- Preserve existing routes and domain primitives unless the repo proves a change is required.
+- Complete PASS 0 through PASS 5 before considering any stretch work.
 
 ## VERIFIED FROM REPO DISCOVERY
 
@@ -15,381 +16,284 @@ Branch: `feat/capture-focus-pass1`
 
 - Framework: Next.js 16.1.6 App Router with React 19 and TypeScript.
 - Package manager: `pnpm@10.30.3`.
-- Expected Node version: `24.x` from `.nvmrc` / `.node-version`.
-- Local runtime in this workspace: Node `v25.7.0`.
+- Expected Node version: `24.x` from `.nvmrc` and `.node-version`.
+- Local shell used during execution: Node `v25.7.0`.
 - Database: local SQLite via `@libsql/client`, file-backed at `data/axis.sqlite`.
-- ORM / migrations: Drizzle ORM with committed migrations in `drizzle/`.
-- Canonical scripts in `package.json`: `dev`, `build`, `start`, `db:generate`, `db:migrate`, `lint`, `check`, `typecheck`.
-- Migration behavior: `pnpm dev`, `pnpm build`, and `pnpm start` all run `pnpm db:migrate` first.
+- ORM and migrations: Drizzle ORM with committed migrations in `drizzle/`.
+- Canonical scripts: `dev`, `build`, `start`, `db:generate`, `db:migrate`, `lint`, `typecheck`, `test`, `test:unit`, `check`.
+- `pnpm dev`, `pnpm build`, and `pnpm start` all run `pnpm db:migrate` first.
 
 ### Capability Detection
 
 - Git commits: available.
-- Git worktrees: available via `git worktree`; current worktree is the main repo checkout only.
-- Child-agent capability: available from the tool surface.
+- Git worktrees: available.
+- Child-agent capability: available.
 - MCP servers configured: `codex_apps`, `openaiDeveloperDocs`, `stitch`.
-- OpenAI developer docs MCP: already configured and enabled; no setup needed.
-- MCP resource listings are empty, but server endpoints are configured.
+- OpenAI developer docs MCP: already configured.
 - Internet/network access: available.
-- Skills: available from the root repo instructions; no additional skill was required for this pass.
+- Skills: available from repo-level instructions, but none were required to complete this run.
 
 ### UI Shell / Routes
 
-- Root shell is `src/app/(app)/layout.tsx`, which wraps app routes in `AppShell`.
-- `AppShell` is a client component with sidebar navigation in `src/features/navigation/app-shell.tsx`.
-- Current app routes:
-  - `/` in `src/app/(app)/page.tsx`
-  - `/tasks` in `src/app/(app)/tasks/page.tsx`
-  - `/tasks/[taskId]` in `src/app/(app)/tasks/[taskId]/page.tsx`
-  - `/calendar` in `src/app/(app)/calendar/page.tsx`
-  - `/shared` in `src/app/(app)/shared/page.tsx`
-  - `/profile` in `src/app/(app)/profile/page.tsx`
-  - `/quick-add` in `src/app/(app)/quick-add/page.tsx`
-- `/` is already the Today homepage.
+- Shell layout: `src/app/(app)/layout.tsx` with `AppShell`.
+- Primary routes:
+  - `/` Today dashboard
+  - `/tasks` Inbox workspace and closed-task browsing via `?view=...`
+  - `/tasks/[taskId]` execution-first task detail
+  - `/upcoming` future-dated focus route
+  - `/calendar` planning calendar
+  - `/shared` assignment view
+  - `/profile` household/profile setup
+  - `/quick-add` full-page reviewable quick-add flow
+- Shell-level quick capture is available from any app route.
 
 ### Task Domain Model
 
-- Task table fields: title, notes, status, dueDate, priority, category, assigneeMemberId, completedAt, timestamps.
-- Task statuses are `active`, `completed`, `archived`.
-- Recurrence is stored in `recurrence_rules`, one row per task, with `frequency`, `interval`, `daysOfWeek`, `dayOfMonth`, and `endsOn`.
-- Recurring completion history is stored in `task_occurrence_logs` keyed by `(taskId, scheduledFor)`.
-- There is no projects/tags model yet; `category` is the only organization field.
+- `tasks` stores title, notes, status, due date, priority, legacy `category`, optional `projectId`, optional `assigneeMemberId`, and completion timestamps.
+- `projects`, `tags`, and `task_tags` now provide the lightweight organization model.
+- `recurrence_rules` stores recurrence shape separately from the base task row.
+- `task_occurrence_logs` stores recurring completion history keyed by `(taskId, scheduledFor)`.
+- `task_action_undos` stores redirect-safe undo payloads for task actions.
 
 ### Persistence Layer
 
-- Drizzle schema is in `src/lib/db/schema.ts`.
-- DB client is in `src/lib/db/client.ts`.
-- Default profile bootstrapping lives in `src/features/profile/data.ts` via `ensureProfile()`.
-- Reads and derivations live in `src/features/tasks/data.ts`.
-- Mutations live in `src/features/tasks/actions.ts`.
+- Schema authority: `src/lib/db/schema.ts`.
+- DB client: `src/lib/db/client.ts`.
+- Task reads and derivations: `src/features/tasks/data.ts`.
+- Task mutations: `src/features/tasks/actions.ts`.
+- Default profile bootstrapping: `src/features/profile/data.ts`.
 
 ### Parser / Recurrence / Calendar
 
-- Quick-add parser is deterministic and local in `src/features/quick-add/parse.ts`.
-- It currently splits by newline / semicolon / bullets and extracts:
-  - chrono-resolved dates
-  - limited recurrence phrases
-  - assignee matches against the household roster
-  - categories from hashtags or known labels
-  - basic priority keywords
-- Current recurrence parsing supports:
-  - daily / every day
-  - every other day
-  - every weekday
-  - repeated `every <weekday>` matches
-  - monthly / every month / every month on the Nth
-- The parser already blocks ambiguous assignee/category matches and emits `Recurring phrases need a clear anchor date.` when recurrence lacks a date.
-- Task form parsing in `src/features/tasks/lib/form.ts` also enforces that recurring tasks require a due date.
-- Recurrence projection is helper-based in `src/features/tasks/lib/recurrence.ts` and uses the task due date as the anchor date.
-- Calendar route uses query params today: `/calendar?month=YYYY-MM&day=YYYY-MM-DD`.
+- Quick-add parsing remains deterministic and local in `src/features/quick-add/parse.ts`.
+- Quick capture uses the same parser as `/quick-add`.
+- Recurrence remains projection-based and anchored to `tasks.dueDate`.
+- Risky recurrence edits now require an explicit history decision instead of silently reinterpreting old occurrence logs.
+- Calendar selection uses query params and now normalizes invalid day values into the visible grid.
+- Calendar grid navigation is keyboardable with arrow keys, Home/End, and Page Up/Page Down.
 
-### Current Focus/Search/Filter Status
+### Search / Filter Status
 
-- `/tasks` is currently a mixed page: manual entry form plus active/completed/archived sections in one route.
-- `/` currently shows:
-  - stats cards
-  - due today list
-  - overdue list
-  - upcoming-week list
-- No dedicated `/upcoming` route exists yet.
-- No search UI exists yet.
-- No generic task filter/query-param primitives exist yet outside the calendar route.
-- No global keyboard shortcuts or shell-level quick-add affordance exists yet.
+- `/tasks` and `/upcoming` now use local query-param filters for:
+  - `view`
+  - `q`
+  - `project`
+  - `tag`
+  - `priority`
+  - `assignee`
+- Filtering is local, case-insensitive, and category-compatible during the rollout window.
 
-### Current Test / CI Status
+### Test / CI Status
 
-- No unit-test harness exists yet.
-- No test files were found in the repo.
-- CI currently runs `pnpm install --frozen-lockfile`, `pnpm lint`, `pnpm typecheck`, and `pnpm build`.
-
-### Recent Relevant History
-
-- `ac18bf9` `fix(db): avoid build-time sqlite writes`
-- `4a464eb` `fix(db): harden recurrence writes`
-- `71f0e22` `fix(quick-add): clean parsed titles and block ambiguous creates`
-- `f8c4427` `fix(tasks): make recurring next due completion-aware`
-- `c529deb` `feat(ui): add mvp planning flows`
+- Unit test harness: `tsx --test src/**/*.test.ts`.
+- CI runs `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build`.
+- Core logic coverage now includes parser, recurrence helpers, task form parsing, organization/filter helpers, notice helpers, and recurrence-edit helpers.
 
 ## ASSUMPTIONS TO PRESERVE UNLESS CONTRADICTED
 
 - Inbox means unscheduled active tasks, not a separate inbox flag.
 - The app remains single-profile and local-first in storage.
 - Auth, invites, and external calendar integrations stay out of scope.
-- Projects + tags remains the intended organization model for a later pass.
-- Current category values should backfill to tags only in PASS 3, not projects.
-- Browser automation is deferred unless there is a strong reason to add it.
-- Execution should extend current task and recurrence primitives rather than introduce a new subsystem.
+- Legacy `category` remains a temporary compatibility bridge, not the long-term authoring model.
+- Search and filtering stay local-first unless repo scale proves otherwise.
+- Stretch work is deferred until the core task loop remains stable after PASS 0 through PASS 5.
 
 ## Architecture Notes
 
-### UI Shell / Route Contract
+### UI Shell
 
-- The main app uses one shell and server-rendered route pages.
-- Navigation is currently sidebar-based and client-side only in the shell.
-- Quick add is currently a separate full-page route; PASS 1 should keep that route and add a shell-level entry point rather than replacing it.
+- `AppShell` owns global navigation, skip-link access, and shell-level quick capture.
+- Capture stays split between:
+  - shell modal for fast single-draft capture
+  - `/quick-add` for batch or ambiguous review
 
-### Task Derivations
+### Task Data Flow
 
-- `src/features/tasks/data.ts` currently owns both DB reads and focus-derivation logic.
-- Display tasks already compute `nextDue`, which is useful for a dedicated Upcoming view.
-- Dashboard agenda items already project recurring occurrences without materializing future task rows.
+- `TaskForm` remains the canonical full edit/create surface.
+- `parseTaskFormData` validates and normalizes form posts before persistence.
+- `saveTaskInput` remains the primary persistence entrypoint for authored tasks.
+- Lightweight notices and undo remain URL and DB backed, not client-state backed.
+
+### Organization Model
+
+- One optional project plus many tags is the current organization model.
+- Legacy `category` is still read for compatibility and backfill safety.
+- Normal task authoring now writes project and tag data without continuing to write `category`.
 
 ### Recurrence Semantics
 
-- The repo already follows the required projection-based recurrence model.
-- Occurrence logs are explicit completion records and must not be silently reinterpreted if recurrence semantics change in later passes.
+- Due date remains the recurrence anchor.
+- Occurrence logs are authoritative historical records.
+- If a recurrence edit would reinterpret old logs, the user must choose:
+  - keep history by archiving the old task and forking a new active task
+  - reset history on the current task
 
-### Search / Filter Baseline
+### Calendar Semantics
 
-- The repo does not yet have a shared task-filter layer.
-- PASS 1 should keep filtering minimal and route-local. PASS 3 can introduce broader query-param filters.
+- Calendar is a planning surface, not a second task subsystem.
+- Month-grid counts show open work.
+- Completed recurring occurrences remain visible in the selected-day agenda as secondary context.
 
-## Architecture Map
-
-### UI Shell / Routes
-
-- Shell: `src/features/navigation/app-shell.tsx`
-- Layout: `src/app/(app)/layout.tsx`
-- Today: `src/app/(app)/page.tsx`
-- Tasks: `src/app/(app)/tasks/page.tsx`
-- Task detail: `src/app/(app)/tasks/[taskId]/page.tsx`
-- Calendar: `src/app/(app)/calendar/page.tsx`
-- Shared: `src/app/(app)/shared/page.tsx`
-- Profile: `src/app/(app)/profile/page.tsx`
-- Quick add: `src/app/(app)/quick-add/page.tsx`
-
-### Task Domain Model
-
-- Types: `src/features/tasks/types.ts`
-- Form parsing: `src/features/tasks/lib/form.ts`
-- Recurrence helpers: `src/features/tasks/lib/recurrence.ts`
-- Date helpers: `src/features/tasks/lib/dates.ts`
-- Data queries / view derivation: `src/features/tasks/data.ts`
-- Mutations: `src/features/tasks/actions.ts`
-
-### Persistence Layer
-
-- DB client: `src/lib/db/client.ts`
-- Schema: `src/lib/db/schema.ts`
-- Migrations: `drizzle/*.sql`
-
-### Parser / Recurrence Logic
-
-- Parser: `src/features/quick-add/parse.ts`
-- Quick-add workspace UI: `src/features/quick-add/quick-add-workspace.tsx`
-- Parser currently supports deterministic titles, dates, assignees, categories, priorities, and limited recurrence phrases.
-
-### Calendar Implementation Status
-
-- Calendar month grid and day agenda are implemented.
-- Query-param navigation exists.
-- Keyboard navigation is not implemented yet.
-
-### Search / Filter Primitive Status
-
-- Calendar has query-param navigation.
-- Task search/filter primitives are not yet implemented.
-
-## Gap Analysis Against Requested Plan
-
-- PASS 0 gap:
-  - `AGENTS.md` was too thin for this repo and lacked execution/scaffolding rules.
-  - `.agent/PLANS.md` did not exist.
-  - No unit-test harness existed.
-  - CI had no unit-test step.
-- PASS 1 gap:
-  - No global quick-add launcher or keyboard shortcut.
-  - No sticky mobile capture affordance.
-  - `/quick-add` had no prefill handoff.
-  - No inline single-draft quick capture flow.
-  - Parser lacks explicit every-N week/month patterns and richer multi-weekday phrases.
-  - No `/upcoming` route.
-  - `/tasks` is not yet an inbox-focused workspace and still mixes completed/archived browsing into side cards.
-  - Priority is stored but underused in focus sorting and badges.
-  - Empty/loading states are minimal.
-
-## Pass Plan
+## Pass Status
 
 ### PASS 0 - Repo Operating System
 
-- Expand `AGENTS.md`.
-- Create `.agent/PLANS.md`.
-- Record verified discovery and capability detection.
-- Add the smallest viable unit-test harness for pure logic.
-- Add PASS 0 unit tests for:
-  - quick-add parsing
-  - recurrence helpers
-  - task form parsing
-- Wire the unit suite into CI once green.
+- Completed.
+- Delivered:
+  - stronger `AGENTS.md`
+  - living `.agent/PLANS.md`
+  - unit test harness
+  - CI unit-test integration
 
 ### PASS 1 - Capture + Focus
 
-- Add shell-level quick capture reachable from any app route.
-- Add desktop and mobile capture affordances.
-- Add `q` shortcut, editable-control guard, `Escape` close, and `Cmd/Ctrl+Enter` submit.
-- Reuse the existing parser:
-  - create inline only for one clear draft
-  - otherwise hand off to `/quick-add` with prefilled input
-- Keep recurrence anchor-date behavior intact.
-- Add deterministic parser expansions for:
-  - explicit every N days/weeks/months
-  - multi-weekday phrases
-  - clearer recurrence ambiguity messages
-- Add `/upcoming`.
-- Turn `/tasks` into the Inbox workspace for unscheduled active tasks.
-- Move completed/archived browsing to `/tasks?view=...`.
-- Surface priority badges / sorting in focus views.
-- Add PASS 1 tests for capture routing and focus selectors.
+- Completed.
+- Delivered:
+  - shell quick capture
+  - `q` shortcut outside editable controls
+  - `/upcoming`
+  - `/tasks` inbox-first routing
+  - parser expansions for explicit every-N intervals and multi-weekday phrases
 
-### Deferred Queue After This Run
+### PASS 2 - Task Execution Loop
 
-- PASS 2: task execution surface and undo/flash flows
-- PASS 3: projects, tags, search, filters, migration bridge
-- PASS 4: recurrence editing improvements and history-choice UX
-- PASS 5: accessibility, mobile polish, performance, QA pass
-- PASS 6: stretch only after PASS 0-5 stabilize
+- Completed.
+- Delivered:
+  - execution-first task detail
+  - redirect-backed notices
+  - undo for complete, archive, reopen, restore, and delete
+  - quicker task actions from focus surfaces
 
-## Delegation / Worktree Plan
+### PASS 3 - Organization
 
-- Child agents and worktrees are available but not ideal for PASS 0 or this PASS 1 slice because the scope crosses shell, parser, routes, task data derivations, tests, and docs.
-- Fallback decision: execute PASS 0 and PASS 1 in the main worktree to avoid merge risk and keep commits coherent.
-- Revisit a QA child agent after implementation if the diff stays bounded and tool output collection remains reliable.
+- Completed.
+- Delivered:
+  - `projects`, `tags`, `task_tags`, and `tasks.projectId`
+  - category-to-tag backfill migration
+  - organization-aware task form and quick-add wiring
+  - query-param search and filters on `/tasks` and `/upcoming`
+  - read compatibility with legacy `category`
 
-## Repo State After PASS 1
+### PASS 4 - Recurrence + Calendar
 
-- Shell capture:
-  - Global quick capture launcher is available from the shell on desktop and mobile.
-  - `q` opens capture when focus is not inside an editable control.
-  - `Escape` closes the dialog and `Cmd/Ctrl+Enter` submits.
-- Quick-add flow:
-  - Single clear captures create inline.
-  - Multiline or ambiguous captures hand off to `/quick-add?input=...`.
-  - `/quick-add` now accepts prefilled input and auto-parses it for review.
-- Focus routes:
-  - `/` remains Today.
-  - `/tasks` is now an inbox-focused workspace for unscheduled active tasks.
-  - Completed and archived browsing moved to `/tasks?view=completed|archived`.
-  - `/upcoming` now exists as a dedicated future-dated focus route.
-- Parser and selectors:
-  - Deterministic recurrence parsing now supports explicit every-N day/week/month intervals and multi-weekday phrases.
-  - Priority-aware focus selectors live in `src/features/tasks/lib/focus.ts`.
-  - Today, Upcoming, and Inbox now surface priority badges and focus-aware sorting.
-- Loading / empty states:
-  - App-shell loading UI exists for focus routes.
-  - Today, Inbox, Completed, Archived, and Upcoming now have explicit empty states with next actions.
+- Completed.
+- Delivered:
+  - clearer recurrence presets and anchor-date explanation
+  - recurrence preview dates in the task form
+  - explicit recurrence-history decision flow
+  - calendar selected-day normalization
+  - keyboardable calendar month grid
+  - clearer planning semantics for calendar counts and agenda state
 
-## Repo State After PASS 2
+### PASS 5 - Quality + Polish
 
-- Task execution surface:
-  - `/tasks/[taskId]` is now execution-first with quick actions, execution context, destructive confirmations, and the edit form anchored below at `#edit-task`.
-  - One-time tasks can complete or reopen from detail; archived tasks can restore from detail or from `/tasks?view=archived`.
-  - Recurring detail pages now explain next due, recent occurrence history, projected upcoming dates, and anchor-date semantics.
-- Redirect-backed notices / undo:
-  - Lightweight task notices now render on `/`, `/tasks`, `/tasks/[taskId]`, `/upcoming`, `/calendar`, and `/shared`.
-  - Complete, archive, reopen, restore, and delete now redirect with explicit notice copy.
-  - One-step undo is backed by the new `task_action_undos` table.
-- List execution entry points:
-  - Today, Inbox, Completed, Archived, Upcoming, Calendar agenda, and Shared now expose direct edit and/or recovery actions without forcing users through the old detail-first flow.
-  - Calendar and Shared now pass explicit return paths to task actions so notice redirects land back on the originating route.
-- Testing / support code:
-  - Notice/query-param behavior is covered in `src/features/tasks/lib/notices.test.ts`.
-  - Recurring execution-state derivation is now isolated in `src/features/tasks/lib/execution.ts` with unit coverage in `src/features/tasks/lib/execution.test.ts`.
+- Completed.
+- Delivered:
+  - shell skip link
+  - safer mobile spacing around the fixed quick-capture CTA
+  - icon-button labels and improved keyboard semantics
+  - fieldset/legend semantics for recurrence controls
+  - inline form-error surfacing for invalid recurrence edits
+  - doc sync and final validation sweep
+
+### PASS 6 - Stretch
+
+- Deferred.
+- Reason: the core loop passes are now complete, but stretch scope still needs an explicit product choice.
+
+## Delegation / Worktree Notes
+
+- PASS 0 through PASS 5 were executed in the main worktree because schema, task data, parser, routes, and form components overlapped heavily.
+- Explorer agents were used for bounded repo review and planning support.
+- One QA review sidecar was attempted near the end of PASS 5, but it failed because of an external usage-limit boundary rather than a repo/runtime issue.
 
 ## Progress
 
 - [x] Repo discovery completed.
 - [x] Capability detection completed.
-- [x] Baseline lint/typecheck/build health checked.
-- [x] PASS 0 scaffolding complete.
-- [x] PASS 0 test harness complete.
-- [x] PASS 0 validation complete.
-- [x] PASS 1 implementation complete.
-- [x] PASS 1 validation complete.
-- [x] PASS 2 implementation complete.
-- [x] PASS 2 validation complete.
+- [x] PASS 0 completed and validated.
+- [x] PASS 1 completed and validated.
+- [x] PASS 2 completed and validated.
+- [x] PASS 3 completed and validated.
+- [x] PASS 4 completed and validated.
+- [x] PASS 5 completed and validated.
+- [ ] PASS 6 intentionally deferred.
 
 ## Decision Log
 
-- 2026-03-09: Treat repo discovery as ground truth. Do not assume a separate inbox flag or existing search system.
-- 2026-03-09: Keep execution in the primary worktree because PASS 1 crosses route shell, quick-add, parser, selectors, and docs.
-- 2026-03-09: Use the existing projection-based recurrence model and due-date anchor semantics as a hard constraint for PASS 1.
-- 2026-03-09: Use `tsx --test` plus Node's built-in test runner for unit coverage.
-  - Reason: minimal tooling expansion while preserving TypeScript tests and path-alias support.
-- 2026-03-09: Guard quick-add anchor dates against chrono matches embedded inside recurrence phrases so `every weekday` does not fabricate a due date.
-- 2026-03-09: Reuse the existing shell capture decision helper and server action that appeared during implementation instead of introducing a second global quick-capture pathway.
-- 2026-03-09: Use a dedicated `task_action_undos` table for redirect-backed task undo.
-  - Reason: the repo has no flash/session transport today, and delete/archive/complete/reopen need a one-step undo that survives a redirect without inventing client-only state.
-- 2026-03-09: Extract recurring execution-state derivation into `src/features/tasks/lib/execution.ts`.
-  - Reason: the detail page and focus surfaces need shared next-due/history logic, and the helper is pure enough to unit test directly.
+- 2026-03-09: Kept the remaining passes in the main worktree because the shared write surface crossed schema, data selectors, task form logic, task routes, and calendar behavior.
+- 2026-03-09: Reused the projection-based recurrence model and due-date anchor semantics instead of inventing a second recurrence subsystem.
+- 2026-03-09: Chose one optional project plus many tags as the lightweight organization model, while preserving legacy `category` reads during rollout.
+- 2026-03-09: Backfilled legacy categories to tags only, never to projects.
+- 2026-03-09: Kept search/filter local and query-param driven for `/tasks` and `/upcoming`.
+- 2026-03-09: Required explicit user choice when recurrence edits would reinterpret historical occurrence logs.
+- 2026-03-09: Kept calendar as an internal planning surface and changed month-grid counts to represent open work.
+- 2026-03-09: Used redirect-backed notices for recurring occurrence toggles instead of adding a second client-only feedback system.
 
 ## Surprises / Discoveries
 
-- Local runtime is Node 25.7.0 while the repo and CI target Node 24.x.
-- There is no unit-test harness despite parser/recurrence logic being pure enough to test easily.
-- `/tasks` currently mixes manual entry, active tasks, completed tasks, and archived tasks into one page, so PASS 1 needs a data-shape cleanup as well as UI changes.
-- `chrono-node` will match recurrence-only text like `weekday`, so the parser needed an explicit guard to preserve the repo's clear-anchor recurrence rule.
-- PASS 2 touched more routes than just `/tasks/[taskId]` because the new action signatures required explicit return paths anywhere complete/reopen actions were already exposed.
+- Local execution ran on Node `25.7.0`, while the repo and CI target Node `24.x`.
+- PASS 3 was already partially scaffolded in the worktree when this continuation started, so the main work became validation, integration, and tightening the migration/runtime edges.
+- The legacy category backfill needed stronger whitespace normalization to match runtime tag normalization.
+- Risky recurrence-edit UX was already partly scaffolded in the form, but it needed server enforcement and recovery-friendly error routing.
 
 ## Validation Evidence
 
-- Baseline before PASS 0:
-  - `pnpm lint`: passed on local Node 25.7.0.
-  - `pnpm typecheck`: passed on local Node 25.7.0.
-  - `pnpm build`: passed on local Node 25.7.0 after `pnpm db:migrate`.
-- PASS 0 after adding the unit harness:
-  - `pnpm lint`: passed on local Node 25.7.0.
-  - `pnpm typecheck`: passed on local Node 25.7.0.
-  - `pnpm test:unit`: passed on local Node 25.7.0.
-  - `pnpm build`: passed on local Node 25.7.0 after `pnpm db:migrate`.
-- PASS 1 after capture/focus work:
-  - `pnpm lint`: passed on local Node 25.7.0.
-  - `pnpm typecheck`: passed on local Node 25.7.0.
-  - `pnpm test:unit`: passed on local Node 25.7.0.
-  - `pnpm build`: passed on local Node 25.7.0 after `pnpm db:migrate`.
-  - Runtime smoke fetches: `GET /`, `GET /tasks`, `GET /upcoming`, and `GET /quick-add?input=...` all returned HTTP 200 from `pnpm start` on `127.0.0.1:3100`.
-- PASS 2 after task execution / undo work:
-  - `pnpm db:generate`: passed and created `drizzle/0002_perpetual_talon.sql`.
-  - `pnpm typecheck`: passed on local Node 25.7.0.
-  - `pnpm test:unit`: passed on local Node 25.7.0.
-  - `pnpm lint`: passed on local Node 25.7.0 after warning cleanup.
-  - `pnpm build`: passed on local Node 25.7.0 after `pnpm db:migrate`.
-  - Runtime smoke fetches from `pnpm start --hostname 127.0.0.1 --port 3020` all returned HTTP 200 for:
+- PASS 0:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test:unit`
+  - `pnpm build`
+- PASS 1:
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test:unit`
+  - `pnpm build`
+  - runtime smoke for `/`, `/tasks`, `/upcoming`, and `/quick-add?input=...`
+- PASS 2:
+  - `pnpm db:generate`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test:unit`
+  - `pnpm build`
+  - runtime smoke for `/`, `/tasks`, `/upcoming`, `/quick-add?input=...`, `/shared?...`, `/calendar?...`, and `/tasks/[taskId]?notice=...`
+- PASS 3 through PASS 5:
+  - `pnpm typecheck`
+  - `pnpm test:unit`
+  - `pnpm db:migrate`
+  - `pnpm lint`
+  - `pnpm build`
+  - runtime smoke from `pnpm start --hostname 127.0.0.1 --port 3020` for:
     - `/`
-    - `/tasks`
-    - `/upcoming`
-    - `/quick-add?input=Plan%20me`
-    - `/shared?notice=task-completed&undo=undo-1`
-    - `/calendar?notice=task-completed&undo=undo-1`
-    - `/tasks/1aa11d30-7529-47ef-ac05-1423a80c7b83?notice=task-saved`
-- Every command emitted the expected engine warning because the repo targets Node 24.x while the current shell is Node 25.7.0.
+    - `/tasks?view=inbox&error=recurrence-anchor-required`
+    - `/upcoming?view=recurring&tag=home`
+    - `/calendar?month=2026-03&day=2099-12-31`
+    - `/tasks/1aa11d30-7529-47ef-ac05-1423a80c7b83?error=recurrence-history-choice-required`
+- All validation commands passed locally.
+- Every command emitted the expected engine warning because the repo targets Node `24.x` while the current shell was Node `25.7.0`.
 
 ## Risks
 
-- Node 25 local execution may mask issues not seen on Node 24 CI, especially around toolchain flags.
-- Global quick capture touches shared shell code; keyboard behavior must avoid interfering with text inputs.
-- Route focus changes risk hiding tasks if selectors are wrong; add unit coverage before shipping.
-- PASS 2 runtime validation is route-level only; keyboard-only browser QA for the new notice/undo controls and mobile spacing is still limited to code review in this run.
+- Final confidence should still come from Node 24 CI because local validation ran on Node 25.
+- Browser-driven manual QA is still lighter than ideal; runtime smoke plus code review covered the final pass, but not every keyboard interaction was exercised in a real browser session.
+- Legacy `category` remains in the schema as a compatibility bridge and should be removed only in a later dedicated cleanup pass after rollout confidence is high.
 
 ## Remaining Queue
 
-- PASS 3: add projects, tags, and local-first task filtering/search.
-- PASS 3: define safe category -> tags migration behavior while preserving rollout compatibility.
-- PASS 4: improve recurrence editing UX and require explicit history handling when rule semantics would reinterpret old logs.
-- PASS 5: complete keyboard, mobile, and accessibility QA across dialogs, shell navigation, calendar, and task actions.
+- PASS 6 stretch selection:
+  - offline/local-first strategy refinements
+  - integrations
+  - review/insight flows
+  - differentiated workflows
+- Follow-up cleanup:
+  - remove legacy `category` after the rollout window closes
+  - decide whether occurrence toggles need full undo parity with other task actions
 
 ## Final Checkpoint Summary
 
-- PASS 0 complete:
-  - Expanded repo operating instructions in `AGENTS.md`.
-  - Added `.agent/PLANS.md`.
-  - Added the lightweight unit harness and CI test step.
-- PASS 1 complete:
-  - Added shell-level quick capture with keyboard affordances.
-  - Added `/upcoming`.
-  - Reworked `/tasks` into an inbox-first workspace with query-param closed views.
-  - Expanded deterministic recurrence parsing and prefilled `/quick-add` review.
-- PASS 2 complete:
-  - Refactored `/tasks/[taskId]` into an execution-first surface with detail explanations and destructive confirmations.
-  - Added redirect-backed task notices plus one-step undo backed by `task_action_undos`.
-  - Added direct edit/recovery actions across focus, shared, and calendar task lists.
-  - Added PASS 2 unit coverage for notice helpers and recurring execution-state derivation.
+- The core Axis loop is now implemented across PASS 0 through PASS 5.
+- Capture is fast and available globally.
+- Focus views are separated into Today, Inbox, Upcoming, Calendar, and Shared without stretching the product scope.
+- Organization is lightweight and explicit with one project plus many tags.
+- Recurrence is more understandable and more trustworthy because risky edits cannot silently reinterpret history.
+- The repo is validated, documented, and left ready for either a stretch-scope choice or a dedicated cleanup pass.

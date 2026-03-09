@@ -58,6 +58,7 @@ Environment expectations:
 ## Task / Recurrence / Parser / Calendar / Search Notes
 
 - Task records live in `src/lib/db/schema.ts` under `tasks`.
+- Organization uses one optional project plus many tags. Treat legacy `tasks.category` as a temporary read-compatibility bridge, not the write target.
 - Recurrence rules are stored separately in `recurrence_rules`; completion history for recurring occurrences lives in `task_occurrence_logs`.
 - Recurring behavior is projection-based. Do not silently reinterpret old occurrence logs when anchors or rule shapes change.
 - The due date is the recurrence anchor date. Preserve the rule that recurring tasks need a clear anchor date unless the user explicitly requests a model change.

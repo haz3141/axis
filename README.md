@@ -22,8 +22,10 @@ calendar scheduling, and simple progress summaries.
 - Task inbox focused on unscheduled active work, with completed and archived views behind query params
 - Global quick capture from any app route, plus full-page batch review in `/quick-add`
 - Dedicated `/upcoming` focus route for future-dated work
+- Projects and tags for lightweight organization, plus local-first filters on `/tasks` and `/upcoming`
 - Recurring task support with projected occurrences instead of duplicated future rows
-- Calendar month view with daily agenda
+- Recurrence editing that requires an explicit history choice before anchor or rule-shape changes can reinterpret logged occurrences
+- Calendar month view with keyboard navigation and daily agenda
 - Shared / assigned view grouped by household member
 - Profile and household roster management
 - Natural-language quick add that parses multiple items into reviewable drafts
@@ -37,8 +39,12 @@ Core tables:
 - `profiles`
 - `household_members`
 - `tasks`
+- `projects`
+- `tags`
+- `task_tags`
 - `recurrence_rules`
 - `task_occurrence_logs`
+- `task_action_undos`
 
 Committed migrations live in `drizzle/`. The standard `pnpm dev`, `pnpm build`,
 and `pnpm start` flows run `pnpm db:migrate` before launching, and schema
@@ -92,6 +98,10 @@ pnpm db:migrate
   `src/features/*`.
 - Keep parser, recurrence, and form helpers covered by the lightweight unit
   suite before changing focus or capture flows.
+- Preserve recurrence trust: do not silently reinterpret old occurrence logs
+  when anchors or rule shapes change.
+- Treat legacy `tasks.category` as a rollout-compatibility bridge. New task
+  authoring should use projects and tags instead.
 - Use semantic tokens from `src/app/globals.css` instead of ad hoc palette
   choices.
 
