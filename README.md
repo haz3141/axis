@@ -22,6 +22,7 @@ calendar scheduling, and simple progress summaries.
 - Task inbox focused on unscheduled active work, with completed and archived views behind query params
 - Global quick capture from any app route, plus full-page batch review in `/quick-add`
 - Dedicated `/upcoming` focus route for future-dated work
+- Dedicated `/review` route for weekly wins, recurring follow-through, and open follow-up
 - Projects and tags for lightweight organization, plus local-first filters on `/tasks` and `/upcoming`
 - Recurring task support with projected occurrences instead of duplicated future rows
 - Recurrence editing that requires an explicit history choice before anchor or rule-shape changes can reinterpret logged occurrences
@@ -55,6 +56,7 @@ changes should still go through `pnpm db:generate` followed by `pnpm db:migrate`
 - `/` today dashboard
 - `/tasks` inbox workspace and completed/archived browsing via `?view=...`
 - `/upcoming` future-dated focus route
+- `/review` weekly review workspace
 - `/tasks/[taskId]` task detail / edit flow
 - `/calendar` calendar planning view
 - `/shared` assigned task view

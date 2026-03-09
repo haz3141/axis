@@ -41,6 +41,7 @@ Branch: `feat/capture-focus-pass1`
   - `/tasks` Inbox workspace and closed-task browsing via `?view=...`
   - `/tasks/[taskId]` execution-first task detail
   - `/upcoming` future-dated focus route
+  - `/review` weekly review workspace
   - `/calendar` planning calendar
   - `/shared` assignment view
   - `/profile` household/profile setup
@@ -198,8 +199,11 @@ Branch: `feat/capture-focus-pass1`
 
 ### PASS 6 - Stretch
 
-- Deferred.
-- Reason: the core loop passes are now complete, but stretch scope still needs an explicit product choice.
+- In progress and completed for the first bounded slice.
+- Delivered:
+  - `/review` route for weekly review
+  - review stats for closed one-time work, recurring follow-through, overdue open work, and missed routines
+  - review derivation extracted into `src/features/tasks/lib/review.ts` with unit coverage
 
 ## Delegation / Worktree Notes
 
@@ -217,7 +221,7 @@ Branch: `feat/capture-focus-pass1`
 - [x] PASS 3 completed and validated.
 - [x] PASS 4 completed and validated.
 - [x] PASS 5 completed and validated.
-- [ ] PASS 6 intentionally deferred.
+- [x] PASS 6 review slice completed.
 
 ## Decision Log
 
@@ -229,6 +233,8 @@ Branch: `feat/capture-focus-pass1`
 - 2026-03-09: Required explicit user choice when recurrence edits would reinterpret historical occurrence logs.
 - 2026-03-09: Kept calendar as an internal planning surface and changed month-grid counts to represent open work.
 - 2026-03-09: Used redirect-backed notices for recurring occurrence toggles instead of adding a second client-only feedback system.
+- 2026-03-09: Started PASS 6 with a bounded weekly review route instead of a larger offline or integration push.
+  - Reason: it strengthens the existing core loop using current task and occurrence data, with no new persistence model.
 
 ## Surprises / Discoveries
 
@@ -280,10 +286,9 @@ Branch: `feat/capture-focus-pass1`
 
 ## Remaining Queue
 
-- PASS 6 stretch selection:
+- Further stretch options:
   - offline/local-first strategy refinements
   - integrations
-  - review/insight flows
   - differentiated workflows
 - Follow-up cleanup:
   - remove legacy `category` after the rollout window closes
@@ -292,8 +297,10 @@ Branch: `feat/capture-focus-pass1`
 ## Final Checkpoint Summary
 
 - The core Axis loop is now implemented across PASS 0 through PASS 5.
+- A first PASS 6 stretch slice is also shipped through a dedicated weekly review surface.
 - Capture is fast and available globally.
 - Focus views are separated into Today, Inbox, Upcoming, Calendar, and Shared without stretching the product scope.
+- Review now has a dedicated route built from existing completion and recurrence history.
 - Organization is lightweight and explicit with one project plus many tags.
 - Recurrence is more understandable and more trustworthy because risky edits cannot silently reinterpret history.
 - The repo is validated, documented, and left ready for either a stretch-scope choice or a dedicated cleanup pass.

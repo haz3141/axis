@@ -33,6 +33,7 @@ import {
 import { buildNameKey, mergeTaskTagNames, normalizeName } from "@/features/tasks/lib/organization";
 import { getTaskExecutionState, getTaskNextDue } from "@/features/tasks/lib/execution";
 import { compareAgendaItemsByFocus } from "@/features/tasks/lib/focus";
+import { buildReviewSnapshot } from "@/features/tasks/lib/review";
 import type { AgendaItem, DisplayTask, QuickAddDraft, TaskInput } from "@/features/tasks/types";
 
 export type TaskWithRelations = TaskRecord & {
@@ -570,6 +571,77 @@ export async function getSharedData() {
 
   return {
     groups,
+  };
+}
+
+export async function getReviewData() {
+  const { tasks: taskRows } = await loadTasks();
+  const today = todayKey();
+  const snapshot = buildReviewSnapshot(
+    taskRows.map((task) => ({
+      id: task.id,
+      status: task.status,
+      dueDate: task.dueDate,
+      completedAt: task.completedAt,
+      recurrenceRule: task.recurrenceRule ? recurrenceShape(task.recurrenceRule) : null,
+      occurrenceLogs: task.occurrenceLogs.map((log) => ({
+        scheduledFor: log.scheduledFor,
+      })),
+    })),
+    today
+  );
+  const tasksById = new Map(taskRows.map((task) => [task.id, task] as const));
+  const completedTasks = snapshot.completedTaskIds.flatMap((taskId) => {
+    const task = tasksById.get(taskId);
+
+    return task ? [toDisplayTask(task)] : [];
+  });
+  const recurringWins = snapshot.recurringCompletionTaskIds.flatMap((taskId) => {
+    const task = tasksById.get(taskId);
+
+    if (!task) {
+      return [];
+    }
+
+    return [
+      {
+        task: toDisplayTask(task),
+        completedCount: snapshot.recurringCompletionDatesByTaskId[taskId]?.length ?? 0,
+        completedDates: snapshot.recurringCompletionDatesByTaskId[taskId] ?? [],
+      },
+    ];
+  });
+  const overdueItems = snapshot.overdueTaskIds.flatMap((taskId) => {
+    const task = tasksById.get(taskId);
+
+    return task?.dueDate ? [agendaItem(task, task.dueDate)] : [];
+  });
+  const missedRecurringItems = snapshot.missedRecurringOccurrences.flatMap((entry) => {
+    const task = tasksById.get(entry.taskId);
+
+    if (!task) {
+      return [];
+    }
+
+    return [agendaItem(task, entry.scheduledFor)];
+  });
+
+  return {
+    today,
+    weekStart: snapshot.weekStart,
+    weekEnd: snapshot.weekEnd,
+    completedTasks,
+    recurringWins,
+    attentionItems: [...overdueItems, ...missedRecurringItems].sort(compareAgendaItemsByFocus),
+    stats: {
+      completedOneTime: completedTasks.length,
+      recurringCompletions: recurringWins.reduce(
+        (count, entry) => count + entry.completedCount,
+        0
+      ),
+      overdueOpen: overdueItems.length,
+      missedRecurring: missedRecurringItems.length,
+    },
   };
 }
 

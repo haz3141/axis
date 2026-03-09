@@ -47,6 +47,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             <Button asChild variant="outline">
               <Link href="/tasks">Review inbox</Link>
             </Button>
+            <Button asChild variant="outline">
+              <Link href="/review">Weekly review</Link>
+            </Button>
             <Button asChild>
               <Link href="/upcoming">Open upcoming</Link>
             </Button>

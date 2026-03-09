@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   ArrowRightIcon,
   CalendarIcon,
+  CheckCheckIcon,
   HomeIcon,
   InboxIcon,
   SparklesIcon,
@@ -18,6 +19,7 @@ const navigationItems = [
   { href: "/", label: "Today", icon: HomeIcon },
   { href: "/tasks", label: "Inbox", icon: InboxIcon },
   { href: "/upcoming", label: "Upcoming", icon: ArrowRightIcon },
+  { href: "/review", label: "Review", icon: CheckCheckIcon },
   { href: "/calendar", label: "Calendar", icon: CalendarIcon },
   { href: "/shared", label: "Shared", icon: UsersIcon },
   { href: "/quick-add", label: "Quick add", icon: SparklesIcon },

@@ -10,6 +10,7 @@ This file defines Codex operating rules for this repository.
   - `/` Today
   - `/tasks` Inbox workspace and task browsing
   - `/upcoming` future-dated focus view
+  - `/review` weekly review workspace
   - `/tasks/[taskId]` task detail / execution surface
   - `/calendar` planning calendar
   - `/shared` assignment view
@@ -66,6 +67,7 @@ Environment expectations:
 - Natural-language quick-add parsing lives in `src/features/quick-add/parse.ts`. Keep it deterministic and non-LLM.
 - Calendar logic lives in `src/features/tasks/data.ts` plus `src/features/tasks/lib/dates.ts` and `src/features/tasks/lib/recurrence.ts`.
 - Search and filters should remain simple and local-first unless the repo clearly needs something heavier. Prefer query-param-driven state on route pages over hidden client-only filtering.
+- Review flows should prefer existing task and occurrence history rather than new analytics tables unless the scope explicitly requires persisted insights.
 
 ## Accessibility And UX Expectations
 
