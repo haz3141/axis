@@ -15,6 +15,20 @@
       "when": 1773008517414,
       "tag": "0001_furry_vulture",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1773020949937,
+      "tag": "0002_perpetual_talon",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1773022544579,
+      "tag": "0003_wise_catseye",
+      "breakpoints": true
     }
   ]
 }

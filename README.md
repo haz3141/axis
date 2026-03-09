@@ -18,10 +18,15 @@ calendar scheduling, and simple progress summaries.
 
 ## MVP Features
 
-- Dashboard / Today view with due, overdue, upcoming, and recurring summaries
-- Task inbox with create, edit, complete, archive, and delete flows
+- Dashboard / Today view with due, overdue, upcoming preview, and recurring summaries
+- Task inbox focused on unscheduled active work, with completed and archived views behind query params
+- Global quick capture from any app route, plus full-page batch review in `/quick-add`
+- Dedicated `/upcoming` focus route for future-dated work
+- Dedicated `/review` route for weekly wins, recurring follow-through, and open follow-up
+- Projects and tags for lightweight organization, plus local-first filters on `/tasks` and `/upcoming`
 - Recurring task support with projected occurrences instead of duplicated future rows
-- Calendar month view with daily agenda
+- Recurrence editing that requires an explicit history choice before anchor or rule-shape changes can reinterpret logged occurrences
+- Calendar month view with keyboard navigation and daily agenda
 - Shared / assigned view grouped by household member
 - Profile and household roster management
 - Natural-language quick add that parses multiple items into reviewable drafts
@@ -35,8 +40,12 @@ Core tables:
 - `profiles`
 - `household_members`
 - `tasks`
+- `projects`
+- `tags`
+- `task_tags`
 - `recurrence_rules`
 - `task_occurrence_logs`
+- `task_action_undos`
 
 Committed migrations live in `drizzle/`. The standard `pnpm dev`, `pnpm build`,
 and `pnpm start` flows run `pnpm db:migrate` before launching, and schema
@@ -45,12 +54,14 @@ changes should still go through `pnpm db:generate` followed by `pnpm db:migrate`
 ## Routes
 
 - `/` today dashboard
-- `/tasks` inbox and manual task entry
+- `/tasks` inbox workspace and completed/archived browsing via `?view=...`
+- `/upcoming` future-dated focus route
+- `/review` weekly review workspace
 - `/tasks/[taskId]` task detail / edit flow
 - `/calendar` calendar planning view
 - `/shared` assigned task view
 - `/profile` profile and household roster
-- `/quick-add` natural-language capture flow
+- `/quick-add` natural-language batch capture and review flow
 
 ## Requirements
 
@@ -73,6 +84,7 @@ Open `http://localhost:3000` after the dev server starts.
 pnpm dev
 pnpm lint
 pnpm typecheck
+pnpm test
 pnpm build
 pnpm start
 pnpm db:generate
@@ -86,6 +98,12 @@ pnpm db:migrate
   parser flows.
 - Keep shared abstractions minimal. Product logic belongs under
   `src/features/*`.
+- Keep parser, recurrence, and form helpers covered by the lightweight unit
+  suite before changing focus or capture flows.
+- Preserve recurrence trust: do not silently reinterpret old occurrence logs
+  when anchors or rule shapes change.
+- Treat legacy `tasks.category` as a rollout-compatibility bridge. New task
+  authoring should use projects and tags instead.
 - Use semantic tokens from `src/app/globals.css` instead of ad hoc palette
   choices.
 

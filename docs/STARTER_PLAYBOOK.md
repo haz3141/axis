@@ -55,7 +55,7 @@ storage.
   1. update `src/lib/db/schema.ts`
   2. run `pnpm db:generate`
   3. run `pnpm db:migrate`
-  4. re-run `pnpm lint`, `pnpm typecheck`, and `pnpm build`
+  4. re-run `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build`
 
 ## UI Guidance
 
@@ -69,12 +69,13 @@ storage.
 ## Main Routes
 
 - `/`: today dashboard
-- `/tasks`: inbox and manual task entry
+- `/tasks`: inbox workspace plus completed and archived query-param views
+- `/upcoming`: future-dated focus route
 - `/tasks/[taskId]`: task detail and edit flow
 - `/calendar`: month grid plus day agenda
 - `/shared`: grouped assignment view
 - `/profile`: profile and household data
-- `/quick-add`: natural-language draft review flow
+- `/quick-add`: natural-language draft review flow, plus shell capture handoff target
 
 ## Checks
 
@@ -83,6 +84,7 @@ Run these before finishing work:
 ```bash
 pnpm lint
 pnpm typecheck
+pnpm test
 pnpm build
 ```
 

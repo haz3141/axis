@@ -39,6 +39,7 @@ export const tasks = sqliteTable("tasks", {
     enum: ["low", "medium", "high"],
   }),
   category: text("category"),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
   assigneeMemberId: text("assignee_member_id").references(
     () => householdMembers.id,
     { onDelete: "set null" }
@@ -70,6 +71,63 @@ export const recurrenceRules = sqliteTable(
   })
 );
 
+export const projects = sqliteTable(
+  "projects",
+  {
+    id: text("id").primaryKey(),
+    profileId: text("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    nameKey: text("name_key").notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    profileNameKeyUnique: uniqueIndex("projects_profile_name_key_unique").on(
+      table.profileId,
+      table.nameKey
+    ),
+  })
+);
+
+export const tags = sqliteTable(
+  "tags",
+  {
+    id: text("id").primaryKey(),
+    profileId: text("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    nameKey: text("name_key").notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    profileNameKeyUnique: uniqueIndex("tags_profile_name_key_unique").on(
+      table.profileId,
+      table.nameKey
+    ),
+  })
+);
+
+export const taskTags = sqliteTable(
+  "task_tags",
+  {
+    id: text("id").primaryKey(),
+    taskId: text("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    tagId: text("tag_id")
+      .notNull()
+      .references(() => tags.id, { onDelete: "cascade" }),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    taskTagUnique: uniqueIndex("task_tags_task_id_tag_id_unique").on(table.taskId, table.tagId),
+  })
+);
+
 export const taskOccurrenceLogs = sqliteTable(
   "task_occurrence_logs",
   {
@@ -89,8 +147,20 @@ export const taskOccurrenceLogs = sqliteTable(
   })
 );
 
+export const taskActionUndos = sqliteTable("task_action_undos", {
+  id: text("id").primaryKey(),
+  taskId: text("task_id").notNull(),
+  kind: text("kind", {
+    enum: ["complete", "archive", "restore", "reopen", "delete"],
+  }).notNull(),
+  payload: text("payload").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const profilesRelations = relations(profiles, ({ many }) => ({
   householdMembers: many(householdMembers),
+  projects: many(projects),
+  tags: many(tags),
   tasks: many(tasks),
 }));
 
@@ -110,6 +180,10 @@ export const tasksRelations = relations(tasks, ({ one, many }) => ({
     fields: [tasks.profileId],
     references: [profiles.id],
   }),
+  project: one(projects, {
+    fields: [tasks.projectId],
+    references: [projects.id],
+  }),
   assignee: one(householdMembers, {
     fields: [tasks.assigneeMemberId],
     references: [householdMembers.id],
@@ -118,7 +192,35 @@ export const tasksRelations = relations(tasks, ({ one, many }) => ({
     fields: [tasks.id],
     references: [recurrenceRules.taskId],
   }),
+  taskTags: many(taskTags),
   occurrenceLogs: many(taskOccurrenceLogs),
+}));
+
+export const projectsRelations = relations(projects, ({ one, many }) => ({
+  profile: one(profiles, {
+    fields: [projects.profileId],
+    references: [profiles.id],
+  }),
+  tasks: many(tasks),
+}));
+
+export const tagsRelations = relations(tags, ({ one, many }) => ({
+  profile: one(profiles, {
+    fields: [tags.profileId],
+    references: [profiles.id],
+  }),
+  taskTags: many(taskTags),
+}));
+
+export const taskTagsRelations = relations(taskTags, ({ one }) => ({
+  task: one(tasks, {
+    fields: [taskTags.taskId],
+    references: [tasks.id],
+  }),
+  tag: one(tags, {
+    fields: [taskTags.tagId],
+    references: [tags.id],
+  }),
 }));
 
 export const recurrenceRulesRelations = relations(
@@ -147,6 +249,13 @@ export type HouseholdMemberRecord = typeof householdMembers.$inferSelect;
 export type NewHouseholdMemberRecord = typeof householdMembers.$inferInsert;
 export type TaskRecord = typeof tasks.$inferSelect;
 export type NewTaskRecord = typeof tasks.$inferInsert;
+export type ProjectRecord = typeof projects.$inferSelect;
+export type NewProjectRecord = typeof projects.$inferInsert;
+export type TagRecord = typeof tags.$inferSelect;
+export type NewTagRecord = typeof tags.$inferInsert;
+export type TaskTagRecord = typeof taskTags.$inferSelect;
+export type NewTaskTagRecord = typeof taskTags.$inferInsert;
 export type RecurrenceRuleRecord = typeof recurrenceRules.$inferSelect;
 export type NewRecurrenceRuleRecord = typeof recurrenceRules.$inferInsert;
 export type TaskOccurrenceLogRecord = typeof taskOccurrenceLogs.$inferSelect;
+export type TaskActionUndoRecord = typeof taskActionUndos.$inferSelect;

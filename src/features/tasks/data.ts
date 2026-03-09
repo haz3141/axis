@@ -1,11 +1,17 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import {
+  projects,
   recurrenceRules,
+  tags,
+  taskTags,
   taskOccurrenceLogs,
   tasks,
   type HouseholdMemberRecord,
+  type ProjectRecord,
   type RecurrenceRuleRecord,
+  type TagRecord,
+  type TaskTagRecord,
   type TaskOccurrenceLogRecord,
   type TaskRecord,
 } from "@/lib/db/schema";
@@ -20,46 +26,22 @@ import {
 } from "@/features/tasks/lib/dates";
 import {
   describeRecurrence,
-  nextOccurrence,
   projectOccurrences,
   serializeDaysOfWeek,
   type RecurrenceRuleShape,
 } from "@/features/tasks/lib/recurrence";
-import type { QuickAddDraft, TaskInput } from "@/features/tasks/types";
+import { buildNameKey, mergeTaskTagNames, normalizeName } from "@/features/tasks/lib/organization";
+import { getTaskExecutionState, getTaskNextDue } from "@/features/tasks/lib/execution";
+import { compareAgendaItemsByFocus } from "@/features/tasks/lib/focus";
+import { buildReviewSnapshot } from "@/features/tasks/lib/review";
+import type { AgendaItem, DisplayTask, QuickAddDraft, TaskInput } from "@/features/tasks/types";
 
 export type TaskWithRelations = TaskRecord & {
   assignee: HouseholdMemberRecord | null;
+  project: ProjectRecord | null;
   recurrenceRule: RecurrenceRuleRecord | null;
+  taskTags: Array<TaskTagRecord & { tag: TagRecord }>;
   occurrenceLogs: TaskOccurrenceLogRecord[];
-};
-
-export type DisplayTask = {
-  id: string;
-  title: string;
-  dueDate: string | null;
-  status: TaskRecord["status"];
-  priority: TaskRecord["priority"];
-  category: string | null;
-  assigneeName: string | null;
-  assigneeMemberId: string | null;
-  isRecurring: boolean;
-  recurrenceSummary: string | null;
-  nextDue: string | null;
-  notes: string | null;
-  completedAt: string | null;
-};
-
-export type AgendaItem = {
-  key: string;
-  taskId: string;
-  title: string;
-  scheduledFor: string;
-  assigneeName: string | null;
-  priority: TaskRecord["priority"];
-  category: string | null;
-  completed: boolean;
-  isRecurring: boolean;
-  recurrenceSummary: string | null;
 };
 
 function recurrenceShape(rule: RecurrenceRuleRecord): RecurrenceRuleShape {
@@ -76,28 +58,149 @@ function isRecurringTask(task: TaskWithRelations) {
   return Boolean(task.recurrenceRule);
 }
 
-function uniqueCategories(taskRows: TaskWithRelations[]) {
-  return [...new Set(taskRows.map((task) => task.category).filter(Boolean) as string[])].sort(
-    (left, right) => left.localeCompare(right)
-  );
+function taskTagNames(task: TaskWithRelations) {
+  const realTagNames = task.taskTags
+    .map((taskTag) => taskTag.tag.name)
+    .sort((left, right) => left.localeCompare(right));
+
+  return mergeTaskTagNames(realTagNames, task.category);
 }
 
-function taskNextDue(task: TaskWithRelations, start = todayKey()) {
-  if (!task.recurrenceRule) {
-    return task.dueDate;
+function taskProjectName(task: TaskWithRelations) {
+  return task.project?.name ?? null;
+}
+
+async function loadOrganizationOptions(profileId: string) {
+  const [projectRows, tagRows] = await Promise.all([
+    db.query.projects.findMany({
+      where: eq(projects.profileId, profileId),
+      orderBy: (_, { asc }) => [asc(projects.name)],
+    }),
+    db.query.tags.findMany({
+      where: eq(tags.profileId, profileId),
+      orderBy: (_, { asc }) => [asc(tags.name)],
+    }),
+  ]);
+
+  return {
+    projects: projectRows.map((project) => project.name),
+    tags: tagRows.map((tag) => tag.name),
+  };
+}
+
+function taskTagSuggestions(taskRows: TaskWithRelations[], tagNames: string[]) {
+  const mergedTagNames = [
+    ...tagNames,
+    ...taskRows.map((task) => task.category).filter(Boolean) as string[],
+  ];
+
+  const deduped = new Map<string, string>();
+
+  for (const tagName of mergedTagNames) {
+    const normalized = normalizeName(tagName);
+
+    if (!normalized) {
+      continue;
+    }
+
+    const nameKey = buildNameKey(normalized);
+
+    if (!deduped.has(nameKey)) {
+      deduped.set(nameKey, normalized);
+    }
   }
 
-  if (!task.dueDate || task.status === "archived") {
+  return [...deduped.values()].sort((left, right) => left.localeCompare(right));
+}
+
+async function resolveProjectId(profileId: string, projectName: string | null) {
+  if (!projectName) {
     return null;
   }
 
-  return nextOccurrence(
-    task.dueDate,
-    recurrenceShape(task.recurrenceRule),
-    start,
-    365,
-    new Set(task.occurrenceLogs.map((log) => log.scheduledFor))
-  );
+  const normalizedProjectName = normalizeName(projectName);
+  const nameKey = buildNameKey(normalizedProjectName);
+  const existingProject = await db.query.projects.findFirst({
+    where: (_, { and, eq }) =>
+      and(eq(projects.profileId, profileId), eq(projects.nameKey, nameKey)),
+  });
+
+  if (existingProject) {
+    return existingProject.id;
+  }
+
+  const projectId = crypto.randomUUID();
+  await db.insert(projects).values({
+    id: projectId,
+    profileId,
+    name: normalizedProjectName,
+    nameKey,
+  });
+
+  return projectId;
+}
+
+async function replaceTaskTags(profileId: string, taskId: string, tagNames: string[]) {
+  const normalizedTagNames = taskNames(tagNames);
+  const existingTags = await db.query.tags.findMany({
+    where: eq(tags.profileId, profileId),
+  });
+  const tagsByKey = new Map(existingTags.map((tag) => [tag.nameKey, tag] as const));
+  const nextTagIds: string[] = [];
+
+  for (const tagName of normalizedTagNames) {
+    const nameKey = buildNameKey(tagName);
+    const existingTag = tagsByKey.get(nameKey);
+
+    if (existingTag) {
+      nextTagIds.push(existingTag.id);
+      continue;
+    }
+
+    const tagId = crypto.randomUUID();
+    const tagRecord = {
+      id: tagId,
+      profileId,
+      name: tagName,
+      nameKey,
+    };
+
+    await db.insert(tags).values(tagRecord);
+    tagsByKey.set(nameKey, { ...tagRecord, createdAt: "", updatedAt: "" });
+    nextTagIds.push(tagId);
+  }
+
+  await db.delete(taskTags).where(eq(taskTags.taskId, taskId));
+
+  if (nextTagIds.length) {
+    await db.insert(taskTags).values(
+      nextTagIds.map((tagId) => ({
+        id: crypto.randomUUID(),
+        taskId,
+        tagId,
+      }))
+    );
+  }
+}
+
+function taskNames(tagNames: string[]) {
+  const deduped = new Map<string, string>();
+
+  for (const tagName of tagNames) {
+    const normalized = normalizeName(tagName);
+
+    if (!normalized) {
+      continue;
+    }
+
+    const nameKey = buildNameKey(normalized);
+
+    if (!deduped.has(nameKey)) {
+      deduped.set(nameKey, normalized);
+    }
+  }
+
+  return [...deduped.values()];
 }
 
 function toDisplayTask(task: TaskWithRelations): DisplayTask {
@@ -107,12 +210,14 @@ function toDisplayTask(task: TaskWithRelations): DisplayTask {
     dueDate: task.dueDate,
     status: task.status,
     priority: task.priority,
-    category: task.category,
+    legacyCategory: task.category,
+    projectName: taskProjectName(task),
+    tagNames: taskTagNames(task),
     assigneeName: task.assignee?.name ?? null,
     assigneeMemberId: task.assigneeMemberId,
     isRecurring: isRecurringTask(task),
     recurrenceSummary: describeRecurrence(task.recurrenceRule, task.dueDate),
-    nextDue: taskNextDue(task),
+    nextDue: getTaskNextDue(task),
     notes: task.notes,
     completedAt: task.completedAt,
   };
@@ -129,14 +234,48 @@ function agendaItem(task: TaskWithRelations, scheduledFor: string): AgendaItem {
     title: task.title,
     scheduledFor,
     assigneeName: task.assignee?.name ?? null,
+    assigneeMemberId: task.assigneeMemberId,
     priority: task.priority,
-    category: task.category,
+    projectName: taskProjectName(task),
+    tagNames: taskTagNames(task),
+    legacyCategory: task.category,
+    notes: task.notes,
     completed: task.recurrenceRule
       ? occurrenceCompleted(task, scheduledFor)
       : task.status === "completed",
     isRecurring: Boolean(task.recurrenceRule),
     recurrenceSummary: describeRecurrence(task.recurrenceRule, task.dueDate),
   };
+}
+
+function buildUpcomingItems(
+  taskRows: TaskWithRelations[],
+  start: string,
+  end: string
+) {
+  const activeTaskRows = taskRows.filter((task) => task.status === "active");
+  const oneTimeItems = activeTaskRows
+    .filter((task) => !task.recurrenceRule)
+    .filter(
+      (task) =>
+        task.dueDate &&
+        compareDateKeys(task.dueDate, start) >= 0 &&
+        compareDateKeys(task.dueDate, end) <= 0
+    )
+    .map((task) => agendaItem(task, task.dueDate!));
+
+  const recurringItems = activeTaskRows
+    .filter((task) => Boolean(task.recurrenceRule && task.dueDate))
+    .flatMap((task) =>
+      projectOccurrences(
+        task.dueDate!,
+        recurrenceShape(task.recurrenceRule!),
+        start,
+        end
+      ).map((scheduledFor) => agendaItem(task, scheduledFor))
+    );
+
+  return [...oneTimeItems, ...recurringItems].sort(compareAgendaItemsByFocus);
 }
 
 async function loadTasks() {
@@ -153,7 +292,13 @@ async function loadTasks() {
     where: eq(tasks.profileId, profile.id),
     with: {
       assignee: true,
+      project: true,
       recurrenceRule: true,
+      taskTags: {
+        with: {
+          tag: true,
+        },
+      },
       occurrenceLogs: {
         orderBy: (_, { desc }) => [desc(taskOccurrenceLogs.scheduledFor)],
       },
@@ -165,6 +310,25 @@ async function loadTasks() {
     profile,
     tasks: taskRows,
   };
+}
+
+export async function getTaskWithRelations(taskId: string) {
+  return db.query.tasks.findFirst({
+    where: eq(tasks.id, taskId),
+    with: {
+      assignee: true,
+      project: true,
+      recurrenceRule: true,
+      taskTags: {
+        with: {
+          tag: true,
+        },
+      },
+      occurrenceLogs: {
+        orderBy: (_, { desc }) => [desc(taskOccurrenceLogs.scheduledFor)],
+      },
+    },
+  });
 }
 
 async function upsertRecurrence(taskId: string, recurrence: TaskInput["recurrence"]) {
@@ -205,6 +369,7 @@ export async function saveTaskInput(
   const profile = await ensureProfile();
   const taskId = existingTask?.id ?? crypto.randomUUID();
   const isRecurring = Boolean(input.recurrence);
+  const projectId = await resolveProjectId(profile.id, input.projectName);
   const nextStatus =
     existingTask?.status === "archived"
       ? "archived"
@@ -219,7 +384,7 @@ export async function saveTaskInput(
     notes: input.notes,
     dueDate: input.dueDate,
     priority: input.priority,
-    category: input.category,
+    projectId,
     assigneeMemberId: input.assigneeMemberId,
     status: nextStatus,
     completedAt: nextCompletedAt,
@@ -236,6 +401,7 @@ export async function saveTaskInput(
   }
 
   await upsertRecurrence(taskId, input.recurrence);
+  await replaceTaskTags(profile.id, taskId, input.tagNames);
 
   return taskId;
 }
@@ -247,7 +413,8 @@ export async function createQuickAddTasks(drafts: QuickAddDraft[]) {
       notes: null,
       dueDate: draft.dueDate,
       priority: draft.priority,
-      category: draft.category,
+      projectName: draft.projectName,
+      tagNames: draft.tagNames,
       assigneeMemberId: draft.assigneeMemberId,
       recurrence: draft.recurrence,
     });
@@ -255,29 +422,35 @@ export async function createQuickAddTasks(drafts: QuickAddDraft[]) {
 }
 
 export async function getTasksPageData() {
-  const [{ tasks: taskRows }, members] = await Promise.all([
-    loadTasks(),
-    getHouseholdMembers(),
-  ]);
+  const [{ profile, tasks: taskRows }, members] = await Promise.all([loadTasks(), getHouseholdMembers()]);
+  const organizationOptions = profile
+    ? await loadOrganizationOptions(profile.id)
+    : { projects: [], tags: [] };
 
   return {
     members,
-    categories: uniqueCategories(taskRows),
+    projects: organizationOptions.projects,
+    tags: taskTagSuggestions(taskRows, organizationOptions.tags),
     tasks: taskRows.map(toDisplayTask),
   };
 }
 
 export async function getTaskDetail(taskId: string) {
-  const [{ tasks: taskRows }, members] = await Promise.all([
+  const [{ profile, tasks: taskRows }, members, task] = await Promise.all([
     loadTasks(),
     getHouseholdMembers(),
+    getTaskWithRelations(taskId),
   ]);
-  const task = taskRows.find((candidate) => candidate.id === taskId) ?? null;
+  const organizationOptions = profile
+    ? await loadOrganizationOptions(profile.id)
+    : { projects: [], tags: [] };
 
   return {
     task,
     members,
-    categories: uniqueCategories(taskRows),
+    projects: organizationOptions.projects,
+    tags: taskTagSuggestions(taskRows, organizationOptions.tags),
+    executionState: task ? getTaskExecutionState(task) : null,
   };
 }
 
@@ -300,30 +473,16 @@ export async function getDashboardData() {
           )
         : []
     ),
-  ].sort((left, right) => left.title.localeCompare(right.title));
+  ].sort(compareAgendaItemsByFocus);
 
   const overdueItems = oneTimeTasks
     .filter((task) => task.dueDate && compareDateKeys(task.dueDate, today) < 0)
     .map((task) => agendaItem(task, task.dueDate!))
-    .sort((left, right) => compareDateKeys(left.scheduledFor, right.scheduledFor));
+    .sort(compareAgendaItemsByFocus);
 
-  const upcomingItems = [
-    ...oneTimeTasks
-      .filter(
-        (task) =>
-          task.dueDate &&
-          compareDateKeys(task.dueDate, today) > 0 &&
-          compareDateKeys(task.dueDate, upcomingEnd) <= 0
-      )
-      .map((task) => agendaItem(task, task.dueDate!)),
-    ...recurringTasks.flatMap((task) =>
-      task.dueDate && task.recurrenceRule
-        ? projectOccurrences(task.dueDate, recurrenceShape(task.recurrenceRule), addDays(today, 1), upcomingEnd).map(
-            (scheduledFor) => agendaItem(task, scheduledFor)
-          )
-        : []
-    ),
-  ].sort((left, right) => compareDateKeys(left.scheduledFor, right.scheduledFor));
+  const upcomingItems = buildUpcomingItems(taskRows, addDays(today, 1), upcomingEnd).filter(
+    (item) => !item.completed
+  );
 
   const weekStart = addDays(today, -new Date(`${today}T12:00:00`).getDay());
   const completedOneTime = taskRows.filter(
@@ -357,6 +516,36 @@ export async function getDashboardData() {
   };
 }
 
+export async function getUpcomingData() {
+  const { profile, tasks: taskRows } = await loadTasks();
+  const today = todayKey();
+  const projectionEnd = addDays(today, 30);
+  const [members, organizationOptions] = await Promise.all([
+    getHouseholdMembers(),
+    profile ? loadOrganizationOptions(profile.id) : Promise.resolve({ projects: [], tags: [] }),
+  ]);
+  const oneTimeItems = taskRows
+    .filter((task) => task.status === "active" && !task.recurrenceRule)
+    .filter((task) => task.dueDate && compareDateKeys(task.dueDate, today) > 0)
+    .map((task) => agendaItem(task, task.dueDate!))
+    .sort(compareAgendaItemsByFocus);
+  const recurringItems = buildUpcomingItems(taskRows, addDays(today, 1), projectionEnd).filter(
+    (item) => item.isRecurring && !item.completed
+  );
+
+  return {
+    projectionEnd,
+    members,
+    projects: organizationOptions.projects,
+    tags: taskTagSuggestions(taskRows, organizationOptions.tags),
+    items: [...oneTimeItems, ...recurringItems].sort(compareAgendaItemsByFocus),
+    stats: {
+      oneTime: oneTimeItems.length,
+      recurring: recurringItems.length,
+    },
+  };
+}
+
 export async function getSharedData() {
   const [{ tasks: taskRows }, members] = await Promise.all([
     loadTasks(),
@@ -385,6 +574,77 @@ export async function getSharedData() {
   };
 }
 
+export async function getReviewData() {
+  const { tasks: taskRows } = await loadTasks();
+  const today = todayKey();
+  const snapshot = buildReviewSnapshot(
+    taskRows.map((task) => ({
+      id: task.id,
+      status: task.status,
+      dueDate: task.dueDate,
+      completedAt: task.completedAt,
+      recurrenceRule: task.recurrenceRule ? recurrenceShape(task.recurrenceRule) : null,
+      occurrenceLogs: task.occurrenceLogs.map((log) => ({
+        scheduledFor: log.scheduledFor,
+      })),
+    })),
+    today
+  );
+  const tasksById = new Map(taskRows.map((task) => [task.id, task] as const));
+  const completedTasks = snapshot.completedTaskIds.flatMap((taskId) => {
+    const task = tasksById.get(taskId);
+
+    return task ? [toDisplayTask(task)] : [];
+  });
+  const recurringWins = snapshot.recurringCompletionTaskIds.flatMap((taskId) => {
+    const task = tasksById.get(taskId);
+
+    if (!task) {
+      return [];
+    }
+
+    return [
+      {
+        task: toDisplayTask(task),
+        completedCount: snapshot.recurringCompletionDatesByTaskId[taskId]?.length ?? 0,
+        completedDates: snapshot.recurringCompletionDatesByTaskId[taskId] ?? [],
+      },
+    ];
+  });
+  const overdueItems = snapshot.overdueTaskIds.flatMap((taskId) => {
+    const task = tasksById.get(taskId);
+
+    return task?.dueDate ? [agendaItem(task, task.dueDate)] : [];
+  });
+  const missedRecurringItems = snapshot.missedRecurringOccurrences.flatMap((entry) => {
+    const task = tasksById.get(entry.taskId);
+
+    if (!task) {
+      return [];
+    }
+
+    return [agendaItem(task, entry.scheduledFor)];
+  });
+
+  return {
+    today,
+    weekStart: snapshot.weekStart,
+    weekEnd: snapshot.weekEnd,
+    completedTasks,
+    recurringWins,
+    attentionItems: [...overdueItems, ...missedRecurringItems].sort(compareAgendaItemsByFocus),
+    stats: {
+      completedOneTime: completedTasks.length,
+      recurringCompletions: recurringWins.reduce(
+        (count, entry) => count + entry.completedCount,
+        0
+      ),
+      overdueOpen: overdueItems.length,
+      missedRecurring: missedRecurringItems.length,
+    },
+  };
+}
+
 export async function getCalendarData(monthKey: string, selectedDay: string) {
   const { tasks: taskRows } = await loadTasks();
   const weeks = buildMonthGrid(monthKey);
@@ -393,7 +653,7 @@ export async function getCalendarData(monthKey: string, selectedDay: string) {
   const itemsByDate = new Map<string, AgendaItem[]>();
 
   for (const task of taskRows) {
-    if (task.status === "archived") {
+    if (task.status !== "active") {
       continue;
     }
 
@@ -426,19 +686,22 @@ export async function getCalendarData(monthKey: string, selectedDay: string) {
     weeks,
     itemsByDate,
     agenda: (itemsByDate.get(selectedDay) ?? []).sort((left, right) =>
-      left.title.localeCompare(right.title)
+      compareAgendaItemsByFocus(left, right)
     ),
   };
 }
 
 export async function getQuickAddReferenceData() {
-  const [{ tasks: taskRows }, members] = await Promise.all([
+  const [{ profile, tasks: taskRows }, members] = await Promise.all([
     loadTasks(),
     getHouseholdMembers(),
   ]);
+  const organizationOptions = profile
+    ? await loadOrganizationOptions(profile.id)
+    : { projects: [], tags: [] };
 
   return {
     members,
-    categories: uniqueCategories(taskRows),
+    tags: taskTagSuggestions(taskRows, organizationOptions.tags),
   };
 }
