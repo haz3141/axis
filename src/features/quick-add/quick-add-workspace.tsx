@@ -11,16 +11,20 @@ import type { QuickAddDraft } from "@/features/tasks/types";
 
 type QuickAddWorkspaceProps = QuickAddContext & {
   action: (formData: FormData) => void | Promise<void>;
+  initialInput?: string;
 };
 
 export function QuickAddWorkspace({
   members,
   categories,
   action,
+  initialInput = "",
 }: QuickAddWorkspaceProps) {
-  const [input, setInput] = useState("");
-  const [drafts, setDrafts] = useState<QuickAddDraft[]>([]);
-  const [parsed, setParsed] = useState(false);
+  const [input, setInput] = useState(initialInput);
+  const [drafts, setDrafts] = useState<QuickAddDraft[]>(() =>
+    initialInput.trim() ? parseQuickAddInput(initialInput, { members, categories }) : []
+  );
+  const [parsed, setParsed] = useState(Boolean(initialInput.trim()));
   const hasAmbiguities = drafts.some((draft) => draft.ambiguities.length > 0);
 
   return (
@@ -74,7 +78,8 @@ export function QuickAddWorkspace({
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-muted-foreground">
             <p>Dates are captured when chrono can resolve them clearly.</p>
-            <p>Recurrence supports daily, weekday, weekly, and monthly phrases.</p>
+            <p>Recurrence supports every N days, weeks, months, and multi-weekday phrases.</p>
+            <p>Recurring drafts still need a clear anchor date before they can be created.</p>
             <p>Assignees only resolve against the household roster.</p>
             <p>Categories resolve from hashtags or known labels.</p>
           </CardContent>

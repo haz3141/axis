@@ -2,12 +2,22 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { HomeIcon, InboxIcon, CalendarIcon, UsersIcon, SparklesIcon, UserCircleIcon } from "lucide-react";
+import {
+  ArrowRightIcon,
+  CalendarIcon,
+  HomeIcon,
+  InboxIcon,
+  SparklesIcon,
+  UserCircleIcon,
+  UsersIcon,
+} from "lucide-react";
+import { GlobalQuickAddLauncher } from "@/features/quick-add/global-quick-add";
 import { cn } from "@/lib/utils";
 
 const navigationItems = [
   { href: "/", label: "Today", icon: HomeIcon },
-  { href: "/tasks", label: "Tasks", icon: InboxIcon },
+  { href: "/tasks", label: "Inbox", icon: InboxIcon },
+  { href: "/upcoming", label: "Upcoming", icon: ArrowRightIcon },
   { href: "/calendar", label: "Calendar", icon: CalendarIcon },
   { href: "/shared", label: "Shared", icon: UsersIcon },
   { href: "/quick-add", label: "Quick add", icon: SparklesIcon },
@@ -28,6 +38,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               Tasks, recurring routines, shared ownership, and quick capture.
             </p>
           </div>
+
+          <GlobalQuickAddLauncher />
 
           <nav className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
             {navigationItems.map((item) => {

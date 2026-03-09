@@ -9,6 +9,7 @@ This file defines Codex operating rules for this repository.
 - Preserve the current route contract unless a change is explicitly required:
   - `/` Today
   - `/tasks` Inbox workspace and task browsing
+  - `/upcoming` future-dated focus view
   - `/tasks/[taskId]` task detail / execution surface
   - `/calendar` planning calendar
   - `/shared` assignment view

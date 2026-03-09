@@ -18,8 +18,10 @@ calendar scheduling, and simple progress summaries.
 
 ## MVP Features
 
-- Dashboard / Today view with due, overdue, upcoming, and recurring summaries
-- Task inbox with create, edit, complete, archive, and delete flows
+- Dashboard / Today view with due, overdue, upcoming preview, and recurring summaries
+- Task inbox focused on unscheduled active work, with completed and archived views behind query params
+- Global quick capture from any app route, plus full-page batch review in `/quick-add`
+- Dedicated `/upcoming` focus route for future-dated work
 - Recurring task support with projected occurrences instead of duplicated future rows
 - Calendar month view with daily agenda
 - Shared / assigned view grouped by household member
@@ -45,12 +47,13 @@ changes should still go through `pnpm db:generate` followed by `pnpm db:migrate`
 ## Routes
 
 - `/` today dashboard
-- `/tasks` inbox and manual task entry
+- `/tasks` inbox workspace and completed/archived browsing via `?view=...`
+- `/upcoming` future-dated focus route
 - `/tasks/[taskId]` task detail / edit flow
 - `/calendar` calendar planning view
 - `/shared` assigned task view
 - `/profile` profile and household roster
-- `/quick-add` natural-language capture flow
+- `/quick-add` natural-language batch capture and review flow
 
 ## Requirements
 

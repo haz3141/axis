@@ -5,8 +5,16 @@ import { QuickAddWorkspace } from "@/features/quick-add/quick-add-workspace";
 
 export const dynamic = "force-dynamic";
 
-export default async function QuickAddPage() {
+type QuickAddPageProps = {
+  searchParams: Promise<{
+    input?: string;
+  }>;
+};
+
+export default async function QuickAddPage({ searchParams }: QuickAddPageProps) {
+  const params = await searchParams;
   const { categories, members } = await getQuickAddReferenceData();
+  const initialInput = params.input?.toString() ?? "";
 
   return (
     <div className="grid gap-6">
@@ -19,9 +27,11 @@ export default async function QuickAddPage() {
         </CardHeader>
         <CardContent>
           <QuickAddWorkspace
+            key={initialInput}
             members={members.map((member) => ({ id: member.id, name: member.name }))}
             categories={categories}
             action={createQuickAddTasksAction}
+            initialInput={initialInput}
           />
         </CardContent>
       </Card>

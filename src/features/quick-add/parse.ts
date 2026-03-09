@@ -10,6 +10,9 @@ export type QuickAddContext = {
   categories: string[];
 };
 
+export const RECURRENCE_ANCHOR_MESSAGE =
+  'Recurring phrases need a clear anchor date like "March 14 2026".';
+
 function escapeRegex(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -56,6 +59,8 @@ const weekdayLookup = [
   "friday",
   "saturday",
 ];
+
+const weekdayPattern = weekdayLookup.join("|");
 
 function splitIntoItems(input: string) {
   return input
@@ -109,6 +114,23 @@ function extractPriority(text: string) {
   };
 }
 
+function parseWeekdays(value: string) {
+  const matches = value.toLowerCase().match(new RegExp(weekdayPattern, "g")) ?? [];
+  return [...new Set(matches.map((match) => weekdayLookup.indexOf(match)))].sort(
+    (left, right) => left - right
+  );
+}
+
+function weeklyRecurrence(interval: number, daysOfWeek: number[]): RecurrenceDraft {
+  return {
+    frequency: "weekly",
+    interval,
+    daysOfWeek,
+    dayOfMonth: null,
+    endsOn: null,
+  };
+}
+
 function extractRecurrence(text: string) {
   for (const candidate of recurrencePatterns) {
     const match = text.match(candidate.pattern);
@@ -121,33 +143,69 @@ function extractRecurrence(text: string) {
     }
   }
 
-  const weekdayMatches = weekdayLookup.flatMap((weekday, index) => {
-    const matches = text.match(new RegExp(`\\bevery\\s+${weekday}\\b`, "ig")) ?? [];
-    return matches.length
-      ? [
-          {
-            day: index,
-            fragments: matches,
-          },
-        ]
-      : [];
-  });
-  const weekdays = weekdayMatches.map((match) => match.day);
+  const explicitDayIntervalMatch = text.match(/\b(every\s+(\d+)\s+days?)\b/i);
 
-  if (weekdays.length) {
+  if (explicitDayIntervalMatch) {
     return {
-      fragments: weekdayMatches.flatMap((match) => match.fragments),
+      fragments: [explicitDayIntervalMatch[1]],
       recurrence: {
-        frequency: "weekly" as const,
-        interval: 1,
-        daysOfWeek: weekdays,
+        frequency: "daily" as const,
+        interval: Number(explicitDayIntervalMatch[2]) || 1,
+        daysOfWeek: [],
         dayOfMonth: null,
         endsOn: null,
       },
     };
   }
 
-  const monthlyMatch = text.match(/\b(monthly|every month(?: on the (\d{1,2})(?:st|nd|rd|th)?)?)\b/i);
+  const weeklyDaysMatch = text.match(
+    new RegExp(
+      `\\b(every(?:\\s+(\\d+))?\\s+(?:weeks?)?(?:\\s+on)?\\s+((?:${weekdayPattern})(?:\\s*(?:,\\s*|\\s+and\\s+)(?:${weekdayPattern})+)*))\\b`,
+      "i"
+    )
+  );
+
+  if (weeklyDaysMatch) {
+    const daysOfWeek = parseWeekdays(weeklyDaysMatch[3]);
+    const interval = Number(weeklyDaysMatch[2]) || 1;
+
+    return {
+      fragments: [weeklyDaysMatch[1]],
+      recurrence: weeklyRecurrence(interval, daysOfWeek),
+    };
+  }
+
+  const explicitWeekIntervalMatch = text.match(/\b(every\s+(\d+)\s+weeks?)\b/i);
+
+  if (explicitWeekIntervalMatch) {
+    return {
+      fragments: [explicitWeekIntervalMatch[1]],
+      recurrence: weeklyRecurrence(Number(explicitWeekIntervalMatch[2]) || 1, []),
+    };
+  }
+
+  const explicitMonthIntervalMatch = text.match(
+    /\b(every\s+(\d+)\s+months?(?:\s+on(?:\s+the)?\s+(\d{1,2})(?:st|nd|rd|th)?)?)\b/i
+  );
+
+  if (explicitMonthIntervalMatch) {
+    return {
+      fragments: [explicitMonthIntervalMatch[1]],
+      recurrence: {
+        frequency: "monthly" as const,
+        interval: Number(explicitMonthIntervalMatch[2]) || 1,
+        daysOfWeek: [],
+        dayOfMonth: explicitMonthIntervalMatch[3]
+          ? Number(explicitMonthIntervalMatch[3])
+          : null,
+        endsOn: null,
+      },
+    };
+  }
+
+  const monthlyMatch = text.match(
+    /\b(monthly|every month(?:\s+on(?:\s+the)?\s+(\d{1,2})(?:st|nd|rd|th)?)?)\b/i
+  );
 
   if (monthlyMatch) {
     return {
@@ -277,23 +335,45 @@ function extractCategory(text: string, context: QuickAddContext) {
 }
 
 function stripFragments(text: string, fragments: Array<string | null | undefined>) {
-  return fragments.reduce<string>(
+  const normalizedFragments = [
+    ...new Set(
+      fragments
+        .filter((fragment): fragment is string => Boolean(fragment?.trim()))
+        .map((fragment) => fragment.trim())
+    ),
+  ].sort((left, right) => right.length - left.length);
+
+  return normalizedFragments.reduce<string>(
     (value, fragment) =>
       fragment
-        ? value.replace(fragment, "").replace(/\s{2,}/g, " ").trim()
+        ? value.replace(fragment, " ").replace(/\s{2,}/g, " ").trim()
         : value,
     text
+  );
+}
+
+function findAnchorDateText(text: string, recurrenceFragments: string[]) {
+  const matches = chrono.casual.parse(text, new Date(), {
+    forwardDate: true,
+  });
+
+  return (
+    matches.find((candidate) => {
+      const normalizedCandidate = candidate.text.toLowerCase();
+
+      return !recurrenceFragments.some((fragment) =>
+        fragment.toLowerCase().includes(normalizedCandidate)
+      );
+    }) ?? null
   );
 }
 
 export function parseQuickAddInput(input: string, context: QuickAddContext) {
   return splitIntoItems(input).map((item) => {
     const ambiguities: string[] = [];
-    const parsedDate = chrono.casual.parse(item, new Date(), {
-      forwardDate: true,
-    })[0];
-    const dueDate = parsedDate?.start ? formatDateKey(parsedDate.start.date()) : null;
     const recurrenceMatch = extractRecurrence(item);
+    const parsedDate = findAnchorDateText(item, recurrenceMatch?.fragments ?? []);
+    const dueDate = parsedDate?.start ? formatDateKey(parsedDate.start.date()) : null;
     const assigneeMatch = extractAssignee(item, context);
     const categoryMatch = extractCategory(item, context);
     const priorityMatch = extractPriority(item);
@@ -307,7 +387,7 @@ export function parseQuickAddInput(input: string, context: QuickAddContext) {
     }
 
     if (recurrenceMatch?.recurrence && !dueDate) {
-      ambiguities.push("Recurring phrases need a clear anchor date.");
+      ambiguities.push(RECURRENCE_ANCHOR_MESSAGE);
     }
 
     const cleanedTitle = stripFragments(item, [

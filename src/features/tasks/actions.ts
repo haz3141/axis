@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db/client";
 import { taskOccurrenceLogs, tasks } from "@/lib/db/schema";
+import { quickAddSuccessPath } from "@/features/quick-add/capture";
 import { revalidateAppPaths } from "@/lib/revalidate";
 import { parseTaskFormData } from "@/features/tasks/lib/form";
 import { createQuickAddTasks, getTaskDetail, saveTaskInput } from "@/features/tasks/data";
@@ -116,5 +117,5 @@ export async function createQuickAddTasksAction(formData: FormData) {
 
   await createQuickAddTasks(parsedDrafts);
   revalidateAppPaths();
-  redirect("/tasks");
+  redirect(quickAddSuccessPath(parsedDrafts));
 }

@@ -255,6 +255,29 @@ Branch: `feat/capture-focus-pass1`
 - Fallback decision: execute PASS 0 and PASS 1 in the main worktree to avoid merge risk and keep commits coherent.
 - Revisit a QA child agent after implementation if the diff stays bounded and tool output collection remains reliable.
 
+## Repo State After PASS 1
+
+- Shell capture:
+  - Global quick capture launcher is available from the shell on desktop and mobile.
+  - `q` opens capture when focus is not inside an editable control.
+  - `Escape` closes the dialog and `Cmd/Ctrl+Enter` submits.
+- Quick-add flow:
+  - Single clear captures create inline.
+  - Multiline or ambiguous captures hand off to `/quick-add?input=...`.
+  - `/quick-add` now accepts prefilled input and auto-parses it for review.
+- Focus routes:
+  - `/` remains Today.
+  - `/tasks` is now an inbox-focused workspace for unscheduled active tasks.
+  - Completed and archived browsing moved to `/tasks?view=completed|archived`.
+  - `/upcoming` now exists as a dedicated future-dated focus route.
+- Parser and selectors:
+  - Deterministic recurrence parsing now supports explicit every-N day/week/month intervals and multi-weekday phrases.
+  - Priority-aware focus selectors live in `src/features/tasks/lib/focus.ts`.
+  - Today, Upcoming, and Inbox now surface priority badges and focus-aware sorting.
+- Loading / empty states:
+  - App-shell loading UI exists for focus routes.
+  - Today, Inbox, Completed, Archived, and Upcoming now have explicit empty states with next actions.
+
 ## Progress
 
 - [x] Repo discovery completed.
@@ -262,7 +285,9 @@ Branch: `feat/capture-focus-pass1`
 - [x] Baseline lint/typecheck/build health checked.
 - [x] PASS 0 scaffolding complete.
 - [x] PASS 0 test harness complete.
-- [ ] PASS 1 implementation not started.
+- [x] PASS 0 validation complete.
+- [x] PASS 1 implementation complete.
+- [x] PASS 1 validation complete.
 
 ## Decision Log
 
@@ -271,12 +296,15 @@ Branch: `feat/capture-focus-pass1`
 - 2026-03-09: Use the existing projection-based recurrence model and due-date anchor semantics as a hard constraint for PASS 1.
 - 2026-03-09: Use `tsx --test` plus Node's built-in test runner for unit coverage.
   - Reason: minimal tooling expansion while preserving TypeScript tests and path-alias support.
+- 2026-03-09: Guard quick-add anchor dates against chrono matches embedded inside recurrence phrases so `every weekday` does not fabricate a due date.
+- 2026-03-09: Reuse the existing shell capture decision helper and server action that appeared during implementation instead of introducing a second global quick-capture pathway.
 
 ## Surprises / Discoveries
 
 - Local runtime is Node 25.7.0 while the repo and CI target Node 24.x.
 - There is no unit-test harness despite parser/recurrence logic being pure enough to test easily.
 - `/tasks` currently mixes manual entry, active tasks, completed tasks, and archived tasks into one page, so PASS 1 needs a data-shape cleanup as well as UI changes.
+- `chrono-node` will match recurrence-only text like `weekday`, so the parser needed an explicit guard to preserve the repo's clear-anchor recurrence rule.
 
 ## Validation Evidence
 
@@ -289,6 +317,12 @@ Branch: `feat/capture-focus-pass1`
   - `pnpm typecheck`: passed on local Node 25.7.0.
   - `pnpm test:unit`: passed on local Node 25.7.0.
   - `pnpm build`: passed on local Node 25.7.0 after `pnpm db:migrate`.
+- PASS 1 after capture/focus work:
+  - `pnpm lint`: passed on local Node 25.7.0.
+  - `pnpm typecheck`: passed on local Node 25.7.0.
+  - `pnpm test:unit`: passed on local Node 25.7.0.
+  - `pnpm build`: passed on local Node 25.7.0 after `pnpm db:migrate`.
+  - Runtime smoke fetches: `GET /`, `GET /tasks`, `GET /upcoming`, and `GET /quick-add?input=...` all returned HTTP 200 from `pnpm start` on `127.0.0.1:3100`.
 - Every command emitted the expected engine warning because the repo targets Node 24.x while the current shell is Node 25.7.0.
 
 ## Risks
@@ -299,11 +333,19 @@ Branch: `feat/capture-focus-pass1`
 
 ## Remaining Queue
 
-- Implement PASS 1 global capture and route changes.
-- Add PASS 1 unit coverage.
-- Re-run lint, typecheck, test, and build.
-- Create coherent commits for PASS 0 and PASS 1.
+- PASS 2: refactor `/tasks/[taskId]` into a stronger execution surface with quick actions first.
+- PASS 2: add lightweight redirect-backed notices or another minimal undo/flash pattern for complete, archive, reopen, and delete.
+- PASS 2: add quick edit entry points from lists and tighten destructive-action safety.
+- PASS 2: explain recurring-task detail semantics more clearly on the task detail page.
 
 ## Final Checkpoint Summary
 
-- Pending. This section will be updated after PASS 1 validation and commit boundaries are complete.
+- PASS 0 complete:
+  - Expanded repo operating instructions in `AGENTS.md`.
+  - Added `.agent/PLANS.md`.
+  - Added the lightweight unit harness and CI test step.
+- PASS 1 complete:
+  - Added shell-level quick capture with keyboard affordances.
+  - Added `/upcoming`.
+  - Reworked `/tasks` into an inbox-first workspace with query-param closed views.
+  - Expanded deterministic recurrence parsing and prefilled `/quick-add` review.

@@ -8,6 +8,7 @@ import {
   reopenTaskAction,
   toggleOccurrenceAction,
 } from "@/features/tasks/actions";
+import { PriorityBadge } from "@/features/tasks/components/priority-badge";
 import { getDashboardData } from "@/features/tasks/data";
 import { formatShortDate } from "@/features/tasks/lib/dates";
 
@@ -26,17 +27,16 @@ export default async function DashboardPage() {
               {dashboard.todayLabel}
             </h2>
             <p className="max-w-2xl text-sm text-muted-foreground">
-              Keep the day simple: finish what is due, clear the overdue pile,
-              and capture new tasks before they scatter.
+              Finish what is due, clear overdue work, and keep future planning in Upcoming instead of mixing it into today.
             </p>
           </div>
 
           <div className="flex gap-3">
             <Button asChild variant="outline">
-              <Link href="/tasks">Manual task entry</Link>
+              <Link href="/tasks">Review inbox</Link>
             </Button>
             <Button asChild>
-              <Link href="/quick-add">Open quick add</Link>
+              <Link href="/upcoming">Open upcoming</Link>
             </Button>
           </div>
         </div>
@@ -58,12 +58,12 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+      <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <Card>
           <CardHeader>
             <CardTitle>Due today</CardTitle>
             <CardDescription>
-              One-time tasks and recurring routines scheduled for today.
+              Active one-time tasks and recurring routines scheduled for today.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3">
@@ -81,9 +81,8 @@ export default async function DashboardPage() {
                       >
                         {item.title}
                       </Link>
-                      {item.isRecurring ? (
-                        <Badge variant="outline">Recurring</Badge>
-                      ) : null}
+                      <PriorityBadge priority={item.priority} />
+                      {item.isRecurring ? <Badge variant="outline">Recurring</Badge> : null}
                       {item.assigneeName ? (
                         <Badge variant="secondary">{item.assigneeName}</Badge>
                       ) : null}
@@ -114,9 +113,19 @@ export default async function DashboardPage() {
                 </div>
               ))
             ) : (
-              <p className="text-sm text-muted-foreground">
-                Nothing is scheduled for today yet.
-              </p>
+              <div className="rounded-2xl border border-dashed p-6">
+                <p className="text-sm text-muted-foreground">
+                  Nothing is scheduled for today. Capture something with <span className="font-medium">q</span> or review the inbox for unscheduled work.
+                </p>
+                <div className="mt-4 flex gap-3">
+                  <Button asChild variant="outline">
+                    <Link href="/tasks">Open inbox</Link>
+                  </Button>
+                  <Button asChild>
+                    <Link href="/quick-add">Batch quick add</Link>
+                  </Button>
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -125,7 +134,9 @@ export default async function DashboardPage() {
           <Card>
             <CardHeader>
               <CardTitle>Overdue</CardTitle>
-              <CardDescription>Unfinished one-time tasks that slipped past their date.</CardDescription>
+              <CardDescription>
+                One-time tasks that slipped past their scheduled date.
+              </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3">
               {dashboard.overdueItems.length ? (
@@ -135,6 +146,7 @@ export default async function DashboardPage() {
                       <Link href={`/tasks/${item.taskId}`} className="font-medium hover:underline">
                         {item.title}
                       </Link>
+                      <PriorityBadge priority={item.priority} />
                       <Badge variant="outline">{formatShortDate(item.scheduledFor)}</Badge>
                     </div>
                     <p className="mt-2 text-sm text-muted-foreground">
@@ -150,14 +162,14 @@ export default async function DashboardPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Upcoming week</CardTitle>
+              <CardTitle>Coming up</CardTitle>
               <CardDescription>
-                The next seven days of due dates and projected recurring work.
+                A short preview of future-dated work. Open Upcoming for the full list.
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3">
               {dashboard.upcomingItems.length ? (
-                dashboard.upcomingItems.map((item) => (
+                dashboard.upcomingItems.slice(0, 6).map((item) => (
                   <div key={item.key} className="rounded-2xl border p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div className="space-y-1">
@@ -168,17 +180,22 @@ export default async function DashboardPage() {
                           {item.recurrenceSummary ?? "One-time task"}
                         </p>
                       </div>
-                      <Badge variant="outline">{formatShortDate(item.scheduledFor)}</Badge>
+                      <div className="flex flex-col items-end gap-2">
+                        <PriorityBadge priority={item.priority} />
+                        <Badge variant="outline">{formatShortDate(item.scheduledFor)}</Badge>
+                      </div>
                     </div>
                   </div>
                 ))
               ) : (
-                <p className="text-sm text-muted-foreground">No upcoming tasks in the next week.</p>
+                <p className="text-sm text-muted-foreground">
+                  No future-dated tasks are scheduled in the next week.
+                </p>
               )}
 
               <Button asChild variant="ghost" className="justify-between">
-                <Link href="/calendar">
-                  Open calendar
+                <Link href="/upcoming">
+                  Open upcoming
                   <ArrowRightIcon className="size-4" />
                 </Link>
               </Button>

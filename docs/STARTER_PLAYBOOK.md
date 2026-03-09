@@ -69,12 +69,13 @@ storage.
 ## Main Routes
 
 - `/`: today dashboard
-- `/tasks`: inbox and manual task entry
+- `/tasks`: inbox workspace plus completed and archived query-param views
+- `/upcoming`: future-dated focus route
 - `/tasks/[taskId]`: task detail and edit flow
 - `/calendar`: month grid plus day agenda
 - `/shared`: grouped assignment view
 - `/profile`: profile and household data
-- `/quick-add`: natural-language draft review flow
+- `/quick-add`: natural-language draft review flow, plus shell capture handoff target
 
 ## Checks
 

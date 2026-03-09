@@ -34,3 +34,32 @@ export type QuickAddDraft = {
   recurrence: RecurrenceDraft | null;
   ambiguities: string[];
 };
+
+export type DisplayTask = {
+  id: string;
+  title: string;
+  dueDate: string | null;
+  status: TaskStatus;
+  priority: TaskPriority | null;
+  category: string | null;
+  assigneeName: string | null;
+  assigneeMemberId: string | null;
+  isRecurring: boolean;
+  recurrenceSummary: string | null;
+  nextDue: string | null;
+  notes: string | null;
+  completedAt: string | null;
+};
+
+export type AgendaItem = {
+  key: string;
+  taskId: string;
+  title: string;
+  scheduledFor: string;
+  assigneeName: string | null;
+  priority: TaskPriority | null;
+  category: string | null;
+  completed: boolean;
+  isRecurring: boolean;
+  recurrenceSummary: string | null;
+};

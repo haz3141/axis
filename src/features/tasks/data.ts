@@ -25,41 +25,13 @@ import {
   serializeDaysOfWeek,
   type RecurrenceRuleShape,
 } from "@/features/tasks/lib/recurrence";
-import type { QuickAddDraft, TaskInput } from "@/features/tasks/types";
+import { compareAgendaItemsByFocus } from "@/features/tasks/lib/focus";
+import type { AgendaItem, DisplayTask, QuickAddDraft, TaskInput } from "@/features/tasks/types";
 
 export type TaskWithRelations = TaskRecord & {
   assignee: HouseholdMemberRecord | null;
   recurrenceRule: RecurrenceRuleRecord | null;
   occurrenceLogs: TaskOccurrenceLogRecord[];
-};
-
-export type DisplayTask = {
-  id: string;
-  title: string;
-  dueDate: string | null;
-  status: TaskRecord["status"];
-  priority: TaskRecord["priority"];
-  category: string | null;
-  assigneeName: string | null;
-  assigneeMemberId: string | null;
-  isRecurring: boolean;
-  recurrenceSummary: string | null;
-  nextDue: string | null;
-  notes: string | null;
-  completedAt: string | null;
-};
-
-export type AgendaItem = {
-  key: string;
-  taskId: string;
-  title: string;
-  scheduledFor: string;
-  assigneeName: string | null;
-  priority: TaskRecord["priority"];
-  category: string | null;
-  completed: boolean;
-  isRecurring: boolean;
-  recurrenceSummary: string | null;
 };
 
 function recurrenceShape(rule: RecurrenceRuleRecord): RecurrenceRuleShape {
@@ -137,6 +109,36 @@ function agendaItem(task: TaskWithRelations, scheduledFor: string): AgendaItem {
     isRecurring: Boolean(task.recurrenceRule),
     recurrenceSummary: describeRecurrence(task.recurrenceRule, task.dueDate),
   };
+}
+
+function buildUpcomingItems(
+  taskRows: TaskWithRelations[],
+  start: string,
+  end: string
+) {
+  const activeTaskRows = taskRows.filter((task) => task.status === "active");
+  const oneTimeItems = activeTaskRows
+    .filter((task) => !task.recurrenceRule)
+    .filter(
+      (task) =>
+        task.dueDate &&
+        compareDateKeys(task.dueDate, start) >= 0 &&
+        compareDateKeys(task.dueDate, end) <= 0
+    )
+    .map((task) => agendaItem(task, task.dueDate!));
+
+  const recurringItems = activeTaskRows
+    .filter((task) => Boolean(task.recurrenceRule && task.dueDate))
+    .flatMap((task) =>
+      projectOccurrences(
+        task.dueDate!,
+        recurrenceShape(task.recurrenceRule!),
+        start,
+        end
+      ).map((scheduledFor) => agendaItem(task, scheduledFor))
+    );
+
+  return [...oneTimeItems, ...recurringItems].sort(compareAgendaItemsByFocus);
 }
 
 async function loadTasks() {
@@ -300,30 +302,16 @@ export async function getDashboardData() {
           )
         : []
     ),
-  ].sort((left, right) => left.title.localeCompare(right.title));
+  ].sort(compareAgendaItemsByFocus);
 
   const overdueItems = oneTimeTasks
     .filter((task) => task.dueDate && compareDateKeys(task.dueDate, today) < 0)
     .map((task) => agendaItem(task, task.dueDate!))
-    .sort((left, right) => compareDateKeys(left.scheduledFor, right.scheduledFor));
+    .sort(compareAgendaItemsByFocus);
 
-  const upcomingItems = [
-    ...oneTimeTasks
-      .filter(
-        (task) =>
-          task.dueDate &&
-          compareDateKeys(task.dueDate, today) > 0 &&
-          compareDateKeys(task.dueDate, upcomingEnd) <= 0
-      )
-      .map((task) => agendaItem(task, task.dueDate!)),
-    ...recurringTasks.flatMap((task) =>
-      task.dueDate && task.recurrenceRule
-        ? projectOccurrences(task.dueDate, recurrenceShape(task.recurrenceRule), addDays(today, 1), upcomingEnd).map(
-            (scheduledFor) => agendaItem(task, scheduledFor)
-          )
-        : []
-    ),
-  ].sort((left, right) => compareDateKeys(left.scheduledFor, right.scheduledFor));
+  const upcomingItems = buildUpcomingItems(taskRows, addDays(today, 1), upcomingEnd).filter(
+    (item) => !item.completed
+  );
 
   const weekStart = addDays(today, -new Date(`${today}T12:00:00`).getDay());
   const completedOneTime = taskRows.filter(
@@ -353,6 +341,29 @@ export async function getDashboardData() {
       overdue: overdueItems.length,
       completedThisWeek: completedOneTime + completedRecurring,
       activeRecurring: recurringTasks.length,
+    },
+  };
+}
+
+export async function getUpcomingData() {
+  const { tasks: taskRows } = await loadTasks();
+  const today = todayKey();
+  const projectionEnd = addDays(today, 30);
+  const oneTimeItems = taskRows
+    .filter((task) => task.status === "active" && !task.recurrenceRule)
+    .filter((task) => task.dueDate && compareDateKeys(task.dueDate, today) > 0)
+    .map((task) => agendaItem(task, task.dueDate!))
+    .sort(compareAgendaItemsByFocus);
+  const recurringItems = buildUpcomingItems(taskRows, addDays(today, 1), projectionEnd).filter(
+    (item) => item.isRecurring && !item.completed
+  );
+
+  return {
+    projectionEnd,
+    items: [...oneTimeItems, ...recurringItems].sort(compareAgendaItemsByFocus),
+    stats: {
+      oneTime: oneTimeItems.length,
+      recurring: recurringItems.length,
     },
   };
 }
@@ -426,7 +437,7 @@ export async function getCalendarData(monthKey: string, selectedDay: string) {
     weeks,
     itemsByDate,
     agenda: (itemsByDate.get(selectedDay) ?? []).sort((left, right) =>
-      left.title.localeCompare(right.title)
+      compareAgendaItemsByFocus(left, right)
     ),
   };
 }
