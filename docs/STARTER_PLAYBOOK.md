@@ -55,7 +55,7 @@ storage.
   1. update `src/lib/db/schema.ts`
   2. run `pnpm db:generate`
   3. run `pnpm db:migrate`
-  4. re-run `pnpm lint`, `pnpm typecheck`, and `pnpm build`
+  4. re-run `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build`
 
 ## UI Guidance
 
@@ -83,6 +83,7 @@ Run these before finishing work:
 ```bash
 pnpm lint
 pnpm typecheck
+pnpm test
 pnpm build
 ```
 

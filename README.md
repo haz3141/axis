@@ -73,6 +73,7 @@ Open `http://localhost:3000` after the dev server starts.
 pnpm dev
 pnpm lint
 pnpm typecheck
+pnpm test
 pnpm build
 pnpm start
 pnpm db:generate
@@ -86,6 +87,8 @@ pnpm db:migrate
   parser flows.
 - Keep shared abstractions minimal. Product logic belongs under
   `src/features/*`.
+- Keep parser, recurrence, and form helpers covered by the lightweight unit
+  suite before changing focus or capture flows.
 - Use semantic tokens from `src/app/globals.css` instead of ad hoc palette
   choices.
 

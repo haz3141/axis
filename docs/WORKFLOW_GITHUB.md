@@ -22,6 +22,7 @@ public reusable template.
 ```bash
 pnpm lint
 pnpm typecheck
+pnpm test
 pnpm build
 ```
 
